@@ -1,0 +1,48 @@
+name: Build Waveshare Baseline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Waveshare baseline
+        uses: actions/checkout@v4
+        with:
+          ref: waveshare-baseline
+
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.2
+          target: esp32s3
+          path: '.'
+
+      - name: Create merged flash image
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          python -m esptool --chip esp32s3 merge_bin             -o build/folloup-waveshare-full.bin             --flash_mode qio             --flash_freq 80m             --flash_size 16MB             $(cat build/flash_args)
+
+      - name: Package firmware
+        shell: bash
+        run: |
+          mkdir -p firmware-package
+          cp build/folloup-waveshare-full.bin firmware-package/
+          cp build/flash_args firmware-package/
+          cp build/flasher_args.json firmware-package/
+          cp build/bootloader/bootloader.bin firmware-package/
+          cp build/partition_table/partition-table.bin firmware-package/
+          find build -maxdepth 1 -name '*.bin' -exec cp {} firmware-package/ \;
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: folloup-waveshare-baseline
+          path: firmware-package/
+          if-no-files-found: error
