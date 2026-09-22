@@ -19,15 +19,18 @@ jobs:
       - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.4.2
+          esp_idf_version: v5.3.4
           target: esp32s3
           path: '.'
 
       - name: Create merged flash image
         shell: bash
         run: |
-          . $IDF_PATH/export.sh
-          python -m esptool --chip esp32s3 merge_bin             -o build/folloup-waveshare-full.bin             --flash_mode qio             --flash_freq 80m             --flash_size 16MB             $(cat build/flash_args)
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/app" \
+            -w /app \
+            espressif/idf:v5.3.4 \
+            /bin/bash -lc '. /opt/esp/idf/export.sh && python -m esptool --chip esp32s3 merge_bin -o build/folloup-waveshare-full.bin --flash_mode qio --flash_freq 80m --flash_size 16MB $(cat build/flash_args)'
 
       - name: Package firmware
         shell: bash
