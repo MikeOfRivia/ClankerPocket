@@ -2501,7 +2501,7 @@ bool Axp2101Driver::setInterruptImpl(uint32_t opts, bool enable)
     {
         int res = 0;
         uint8_t data = 0, value = 0;
-        log_d("%s - HEX:0x%x \n", enable ? "ENABLE" : "DISABLE", opts);
+        log_d("%s - HEX:0x%lx \n", enable ? "ENABLE" : "DISABLE", static_cast<unsigned long>(opts));
         if (opts & 0x0000FF) {
             value = opts & 0xFF;
             // log_d("Write INT0: %x\n", value);
