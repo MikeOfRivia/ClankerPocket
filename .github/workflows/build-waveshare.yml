@@ -14,7 +14,7 @@ jobs:
       - name: Check out Waveshare baseline
         uses: actions/checkout@v4
         with:
-          ref: waveshare-baseline
+          ref: baseline-build-fix
 
       - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
