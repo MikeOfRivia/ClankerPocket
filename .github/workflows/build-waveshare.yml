@@ -1,3 +1,4 @@
+# rebuild: restore input dispatcher stack headroom
 # rebuild: selected PSRAM task stacks
 name: Build Waveshare Baseline
 
