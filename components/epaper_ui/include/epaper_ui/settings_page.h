@@ -26,6 +26,16 @@ struct SettingsPageState {
     std::string_view title_text = "Settings";
     MenuToggleState wifi_toggle = {};
     MenuToggleState access_point_toggle = {};
+    // Pocket Clanker live diagnostics. These are deliberately primitive values so the
+    // renderer never holds string_views into temporary service snapshots.
+    bool wifi_connected = false;
+    bool openai_key_configured = false;
+    bool transcription_ready = false;
+    bool transcription_in_flight = false;
+    int last_openai_http_status = 0;
+    uint32_t free_internal_heap_bytes = 0;
+    uint32_t free_psram_bytes = 0;
+
     SdStatusState storage_status = {};
     ButtonState enable_otg_button = {};
     ButtonState format_sd_button = {};
