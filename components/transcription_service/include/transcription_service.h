@@ -5,6 +5,7 @@
 #include <string>
 
 #include "esp_err.h"
+#include "esp_http_server.h"
 #include "recording_service.h"
 
 namespace transcription_service {
@@ -30,6 +31,10 @@ esp_err_t Init();
 void SetEventHandler(EventHandler handler, void* context);
 Snapshot GetSnapshot();
 bool BeginTranscription(recording_service::RecordedClipPtr clip);
+
+// Pocket Clanker/OpenAI configuration exposed through the captive portal.
+bool HasOpenAiApiKey();
+void RegisterPortalRoutes(httpd_handle_t server);
 
 }  // namespace transcription_service
 
