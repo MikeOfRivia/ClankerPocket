@@ -571,6 +571,25 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
         return false;
     }
 
+    // Re-read NVS if the in-memory key is empty. This makes transcription resilient to
+    // portal configuration timing and ensures a persisted key is seen even if the service
+    // initialized before it was written.
+    {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        if (s_openai_api_key.empty()) {
+            std::string persisted_key;
+            if (LoadOpenAiApiKeyFromNvs(&persisted_key) && !persisted_key.empty()) {
+                s_openai_api_key = std::move(persisted_key);
+                ESP_LOGI(kTag, "Reloaded OpenAI API key from NVS");
+            }
+        }
+        ESP_LOGI(kTag,
+                 "BeginTranscription: key_configured=%d clip_present=%d samples=%u",
+                 s_openai_api_key.empty() ? 0 : 1,
+                 clip ? 1 : 0,
+                 clip ? static_cast<unsigned>(clip->sample_count()) : 0U);
+    }
+
     {
         std::lock_guard<std::mutex> lock(s_mutex);
         if (s_request_in_flight) {
@@ -582,18 +601,18 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
         }
         if (s_openai_api_key.empty()) {
             s_last_http_status = 0;
-            s_last_status_message = "Transcription unavailable";
+            s_last_status_message = "OpenAI key missing";
             s_last_error_code = "not_configured";
-            s_last_error_message = "No OpenAI API key configured";
+            s_last_error_message = "No OpenAI API key configured in memory or NVS";
             s_last_transcript.clear();
             NotifyLocked();
             return false;
         }
         if (!clip || clip->empty()) {
             s_last_http_status = 0;
-            s_last_status_message = "Transcription unavailable";
+            s_last_status_message = "Audio clip missing";
             s_last_error_code = "empty_audio";
-            s_last_error_message = "No recorded audio available";
+            s_last_error_message = "Recorded clip was empty before transcription";
             s_last_transcript.clear();
             NotifyLocked();
             return false;
