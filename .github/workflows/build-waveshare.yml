@@ -1,4 +1,4 @@
-# rebuild: upstream Waveshare under original ESP-IDF 5.5.4
+# rebuild: compatibility-fixed Waveshare under ESP-IDF 5.5.4
 name: Build Waveshare Baseline
 
 on:
@@ -15,7 +15,7 @@ jobs:
       - name: Check out Waveshare baseline
         uses: actions/checkout@v4
         with:
-          ref: upstream-idf554-test
+          ref: baseline-build-fix
 
       - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
