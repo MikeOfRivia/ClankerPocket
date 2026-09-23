@@ -1159,6 +1159,11 @@ void EnterAccessPointModeNow()
 
     StopConfigPortal();
 
+    // Give any just-queued Settings focus/region refresh time to finish before the radio
+    // changes mode. The Waveshare board is sensitive to simultaneous e-paper charge-pump
+    // activity and Wi-Fi transmit current.
+    vTaskDelay(pdMS_TO_TICKS(350));
+
     // If we were associated as a station, disconnect first and give the driver a beat to settle
     // before stopping it. Failures are diagnostic only; none of these calls may reboot the board.
     esp_err_t err = esp_wifi_disconnect();
