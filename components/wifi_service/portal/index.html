@@ -1,147 +1,67 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Followup Setup</title>
-    <script type="module" crossorigin src="./index.js"></script>
-    <link rel="stylesheet" crossorigin href="./index.css">
-  </head>
-  <body>
-    <main role="main" aria-label="Followup Setup">
-      <div id="followupLogo" class="followup-logo" aria-hidden="true"></div>
-
-      <div class="connected-components">
-        <ui-network-status id="wifiStatusCard"></ui-network-status>
-
-        <ui-bottom-sheet
-          id="wifiSettingsSheet"
-          title="WiFi Settings"
-          description="Scan for available networks and connect your Followup to WiFi."
-        >
-          <ui-icon-button
-            id="wifiSettingsCloseBtn"
-            slot="header-actions"
-            variant="ghost"
-            aria-label="Close WiFi Settings"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6.7 5.3 12 10.6l5.3-5.3 1.4 1.4L13.4 12l5.3 5.3-1.4 1.4L12 13.4l-5.3 5.3-1.4-1.4L10.6 12 5.3 6.7Z" />
-            </svg>
-          </ui-icon-button>
-
-          <div
-            id="wifiSettingsNotification"
-            class="wifi-sheet-notification"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            hidden
-          ></div>
-
-          <ui-network-list id="networkList"></ui-network-list>
-
-          <div class="wifi-connection-form">
-            <ui-input
-              id="password"
-              variant="password"
-              label="WiFi Password"
-              placeholder="Enter network password"
-              autocomplete="off"
-            ></ui-input>
-          </div>
-
-          <ui-button
-            slot="footer"
-            id="scanBtn"
-            variant="secondary"
-          >
-            Scan Network
-          </ui-button>
-          <ui-button
-            slot="footer"
-            id="connectBtn"
-            variant="primary"
-          >
-            Connect
-          </ui-button>
-        </ui-bottom-sheet>
-
-        <ui-card id="geminiCard" title="Gemini API Key">
-            <ui-input
-              id="geminiApiKeyInput"
-              label="Gemini API Key"
-              placeholder="Enter Gemini API key"
-              autocomplete="off"
-              inputmode="text"
-            ></ui-input>
-
-            <ui-button
-              slot="footer"
-              id="geminiClearBtn"
-              variant="secondary"
-            >
-              Clear
-            </ui-button>
-            <ui-button
-              slot="footer"
-              id="geminiSaveBtn"
-              variant="primary"
-            >
-              Save
-            </ui-button>
-        </ui-card>
-
-        <ui-card id="timezoneLocationCard" title="Time Configuration">
-            <ui-select
-              id="timezoneSelect"
-              label="Timezone"
-              aria-label="Timezone"
-            >
-              <option value="">Select timezone</option>
-            </ui-select>
-
-            <div class="form-control-row">
-              <ui-input
-                id="manualTimeInput"
-                variant="time"
-                label="Time"
-              ></ui-input>
-
-              <ui-input
-                id="manualDateInput"
-                variant="date"
-                label="Current Date"
-              ></ui-input>
-            </div>
-
-            <p class="form-helper-text">
-              Set the time zone and location first to sync the current local time. You can also
-              set the date and time manually if needed.
-            </p>
-
-            <ui-button
-              slot="footer"
-              id="timezoneLocationClearBtn"
-              variant="secondary"
-            >
-              Clear
-            </ui-button>
-            <ui-button
-              slot="footer"
-              id="timezoneLocationSaveBtn"
-              variant="primary"
-            >
-              Save
-            </ui-button>
-        </ui-card>
-      </div>
-    </main>
-
-    <ui-toast
-      id="statusToast"
-      aria-label="Status notification"
-    ></ui-toast>
-
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Followup Setup</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:560px;margin:32px auto;padding:0 16px;color:#222}
+h1{margin-bottom:4px}button,input,select{font:inherit;padding:10px;margin:6px 0}
+button{cursor:pointer}select,input{width:100%;box-sizing:border-box}
+#msg{margin:12px 0;white-space:pre-wrap}.row{display:flex;gap:8px}.row button{flex:1}
+small{color:#666}
+</style>
+</head>
+<body>
+<h1>Followup Setup</h1>
+<small id="state">Checking device...</small>
+<h2>Wi-Fi</h2>
+<div class="row"><button id="scan">Scan Networks</button><button id="refresh">Refresh Status</button></div>
+<select id="net"><option value="">Select network</option></select>
+<input id="pass" type="password" placeholder="Wi-Fi password">
+<button id="connect">Connect</button>
+<div id="msg"></div>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path,opt){
+  const r=await fetch(path,{cache:"no-store",...opt,headers:{"Content-Type":"application/json",...(opt&&opt.headers||{})}});
+  const t=await r.text(); let j={}; try{j=JSON.parse(t)}catch(e){throw Error("Bad response: "+t.slice(0,80))}
+  if(!r.ok||j.success===false) throw Error(j.message||("HTTP "+r.status)); return j;
+}
+function show(s){$("msg").textContent=s}
+async function status(){
+  try{
+    const j=await api("/api/status");
+    $("state").textContent=j.connected?("Connected to "+j.ssid+" — "+j.ip_address):("Setup AP: "+j.ap_ssid);
+    return j;
+  }catch(e){show("Status failed: "+e.message)}
+}
+async function scan(){
+  show("Scanning...");
+  try{
+    for(let i=0;i<20;i++){
+      const j=await api("/api/scan");
+      if(!j.scan_in_progress){
+        const n=Array.isArray(j.networks)?j.networks:[];
+        $("net").innerHTML='<option value="">Select network</option>'+n.map(x=>'<option></option>').join("");
+        [...$("net").options].slice(1).forEach((o,i)=>{o.value=n[i].ssid;o.textContent=n[i].ssid+(n[i].is_open?"":" 🔒")});
+        show(n.length?("Found "+n.length+" networks"):"No networks found"); return;
+      }
+      await new Promise(r=>setTimeout(r,750));
+    }
+    show("Scan timed out");
+  }catch(e){show("Scan failed: "+e.message)}
+}
+async function connect(){
+  const ssid=$("net").value;if(!ssid){show("Select a network first");return}
+  show("Connecting to "+ssid+"...");
+  try{
+    await api("/api/configure",{method:"POST",body:JSON.stringify({ssid,password:$("pass").value})});
+    for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,1000));const j=await status();if(j&&j.connected){show("Connected. You can leave this page.");return}}
+    show("Connection still in progress.");
+  }catch(e){show("Connect failed: "+e.message)}
+}
+$("scan").onclick=scan;$("connect").onclick=connect;$("refresh").onclick=status;status();
+</script>
+</body>
 </html>
