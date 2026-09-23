@@ -1153,6 +1153,7 @@ void RegisterWifiBackendRoutes(httpd_handle_t server, void*)
 {
     timezone_service::RegisterPortalRoutes(server);
     gemini_service::RegisterPortalRoutes(server);
+    transcription_service::RegisterPortalRoutes(server);
 }
 
 void HandleGeminiEvent(const gemini_service::Event& event, void*)
