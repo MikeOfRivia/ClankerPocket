@@ -1,3 +1,4 @@
+# rebuild: move openai transcription worker to psram
 # rebuild: pocket clanker openai transcription + portal key
 # rebuild: pocket clanker direct transcription
 # rebuild: self-contained minimal wifi portal
