@@ -65,7 +65,7 @@ constexpr uint32_t kAutoSleepDisplaySleepTimeoutSeconds =
     CONFIG_FOLLOWUP_AUTO_SLEEP_DISPLAY_SLEEP_TIMEOUT_SECONDS;
 constexpr uint32_t kAutoSleepLightSleepTimeoutSeconds =
     CONFIG_FOLLOWUP_AUTO_SLEEP_LIGHT_SLEEP_TIMEOUT_SECONDS;
-constexpr uint32_t kShutdownTaskStackWords = 3072;
+constexpr uint32_t kShutdownTaskStackWords = 2048;
 constexpr TickType_t kPowerButtonReleaseSettleDelay = pdMS_TO_TICKS(500);
 
 TaskHandle_t s_shutdown_task = nullptr;
