@@ -54,7 +54,7 @@ Layout BuildLayout(int portrait_width, int portrait_height, const SettingsPageSt
         MenuToggleBounds(page_x, wifi_toggle.bottom(), access_point_style);
 
     const int pocket_status_heading_y = access_point_toggle.bottom() + kSectionGap;
-    const int status_line_height = LineHeight(design::TypographyRole::kBodySmall);
+    const int status_line_height = LineHeight(design::TypographyRole::kDetail);
     const int pocket_status_first_line_y =
         pocket_status_heading_y + LineHeight(kSectionRole) + kStatusBlockGap;
     const int pocket_status_bottom =
@@ -253,7 +253,7 @@ void DrawSettingsPage(uint8_t* framebuffer,
                        design::color::kBlack);
 
     const auto draw_status_line = [&](int line_index, const char* text) {
-        const int line_height = LineHeight(design::TypographyRole::kBodySmall);
+        const int line_height = LineHeight(design::TypographyRole::kDetail);
         DrawTypographyText(framebuffer,
                            raw_width,
                            raw_height,
@@ -263,7 +263,7 @@ void DrawSettingsPage(uint8_t* framebuffer,
                            layout.pocket_status_first_line_y +
                                line_index * (line_height + kStatusLineGap),
                            text,
-                           design::TypographyRole::kBodySmall,
+                           design::TypographyRole::kDetail,
                            design::color::kBlack);
     };
 
