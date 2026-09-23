@@ -22,6 +22,10 @@ CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Keep selected long-lived UI/display task stacks in PSRAM to preserve scarce internal DRAM.
+# Only tasks explicitly created with xTaskCreatePinnedToCoreWithCaps() use external RAM.
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
 # Audio: ES8311 codec over the esp_codec_dev / esp_audio_codec managed components.
