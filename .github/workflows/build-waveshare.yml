@@ -1,3 +1,4 @@
+# rebuild: instrument reset cause on-device
 # rebuild: avoid AP radio + e-paper power collision
 # rebuild: make manual AP transition reboot-proof
 # rebuild: stable AP-only setup mode
