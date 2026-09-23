@@ -12,6 +12,19 @@
 
 namespace epaper_ui {
 
+enum class ResetReasonDisplay : uint8_t {
+    kUnknown = 0,
+    kPowerOn,
+    kSoftware,
+    kPanic,
+    kInterruptWatchdog,
+    kTaskWatchdog,
+    kWatchdog,
+    kDeepSleep,
+    kBrownout,
+    kUsb,
+};
+
 enum class SettingsPageItemId : uint8_t {
     kNone = 0,
     kWifiToggle,
@@ -35,6 +48,7 @@ struct SettingsPageState {
     int last_openai_http_status = 0;
     uint32_t free_internal_heap_bytes = 0;
     uint32_t free_psram_bytes = 0;
+    ResetReasonDisplay reset_reason = ResetReasonDisplay::kUnknown;
 
     SdStatusState storage_status = {};
     ButtonState enable_otg_button = {};
