@@ -7,8 +7,10 @@
 
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
 #include "overlay_runtime.h"
 
@@ -310,13 +312,14 @@ esp_err_t Init()
         return ESP_OK;
     }
 
-    const BaseType_t created = xTaskCreatePinnedToCore(UiRefreshTask,
+    const BaseType_t created = xTaskCreatePinnedToCoreWithCaps(UiRefreshTask,
                                                        "ui_refresh",
                                                        kUiRefreshTaskStackWords,
                                                        nullptr,
                                                        followup_task_config::kPriorityUiRefresh,
                                                        &s_task,
-                                                       followup_task_config::kAppCore);
+                                                       followup_task_config::kAppCore,
+                                                       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (created != pdPASS) {
         s_task = nullptr;
         return ESP_ERR_NO_MEM;
