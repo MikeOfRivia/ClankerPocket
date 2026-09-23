@@ -2,6 +2,7 @@
 #define EPAPER_UI_SETTINGS_PAGE_H_
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "epaper_ui/button.h"
@@ -46,6 +47,8 @@ struct SettingsPageState {
     bool transcription_ready = false;
     bool transcription_in_flight = false;
     int last_openai_http_status = 0;
+    std::string transcription_error_code = {};
+    std::string transcription_error_message = {};
     uint32_t free_internal_heap_bytes = 0;
     uint32_t free_psram_bytes = 0;
     ResetReasonDisplay reset_reason = ResetReasonDisplay::kUnknown;
