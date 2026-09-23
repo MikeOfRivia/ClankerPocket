@@ -912,29 +912,27 @@ void HandleRecordingSessionEvent(const recording_session_service::Event& event, 
         }
         case recording_session_service::Phase::kComplete: {
             epaper_ui::ToastState toast = {};
-            if (event.snapshot.transcript_saved) {
-                toast = BuildToast("Transcript saved to SD", EmbeddedIconId::kFileTranscript);
+            uint32_t duration_ms = 2500;
+            if (!event.snapshot.last_transcript.empty()) {
+                // First Pocket Clanker milestone: surface exactly what the device heard.
+                // Keep it up long enough to read on e-paper while we wire the response backend.
+                toast = BuildToast(event.snapshot.last_transcript.c_str(),
+                                   EmbeddedIconId::kFileTranscript);
+                duration_ms = 10000;
             } else if (!event.snapshot.last_error_code.empty()) {
-                // Transcription was attempted but failed. Surface it as a failure (the recording
-                // itself is still on SD) with a specific message for a quota/rate-limit error.
                 const bool quota_exceeded =
                     event.snapshot.last_error_code == "RESOURCE_EXHAUSTED";
                 toast = BuildToast(quota_exceeded ? "Gemini quota exceeded" : "Transcription failed",
                                    EmbeddedIconId::kClose);
-            } else if (event.snapshot.clip_saved) {
-                toast = BuildToast("Recording saved to SD", EmbeddedIconId::kCheck);
             } else {
-                toast = BuildToast(event.snapshot.last_status_message.c_str(), EmbeddedIconId::kClose);
+                toast = BuildToast(event.snapshot.last_status_message.c_str(), EmbeddedIconId::kCheck);
             }
-            const esp_err_t err = overlay_runtime::ShowToastForDuration(toast, 2500);
+            const esp_err_t err = overlay_runtime::ShowToastForDuration(toast, duration_ms);
             FlushOverlayFeedback();
             if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-                ESP_LOGW(kTag, "Show recording completion toast failed: %s",
+                ESP_LOGW(kTag, "Show Pocket Clanker transcript failed: %s",
                          esp_err_to_name(err));
             }
-            // A saved transcript flips the recording's has_transcript flag, which fires an archive
-            // event; HandleRecordingArchiveEvent re-syncs whichever page is on screen (so the card
-            // swaps "audio only" for the transcript). No page-specific reload is needed here.
             break;
         }
         case recording_session_service::Phase::kFailed: {
