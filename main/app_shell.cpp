@@ -360,14 +360,16 @@ bool s_onboarding_from_settings = false;
 
 bool OnboardingViewed()
 {
+    // Pocket Clanker development builds default to skipping first-run onboarding. The manual
+    // remains available from Settings, but repeated firmware flashes should land on Home.
     nvs_handle_t handle = 0;
     if (nvs_open(kOnboardingNvsNamespace, NVS_READONLY, &handle) != ESP_OK) {
-        return false;
+        return true;
     }
-    uint8_t viewed = 0;
+    uint8_t viewed = 1;
     const esp_err_t err = nvs_get_u8(handle, kOnboardingNvsKey, &viewed);
     nvs_close(handle);
-    return err == ESP_OK && viewed != 0;
+    return err == ESP_OK ? viewed != 0 : true;
 }
 
 void MarkOnboardingViewed()
