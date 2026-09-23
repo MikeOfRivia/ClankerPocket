@@ -1210,13 +1210,17 @@ void HandleWifiEvent(const wifi_service::Event& event, void*)
     gemini_service::SetNetworkState(event.ui_state.connected,
                                     event.ui_state.access_point_mode);
 
-    // Region scope, not screen scope. Wi-Fi events fire during and right after the page
-    // transition, and a screen-scope partial re-inits the panel and drives it whatever the
-    // content -- landing a second, weaker drive on top of a page the transition already
-    // rendered correctly. RefreshChangedRegion compares against the glass first and does
-    // nothing when only the status bar's own pixels are unchanged.
+    // Do not drive the e-paper panel while the setup AP radio is being brought up.
+    // The Wi-Fi service already documents this board's sensitivity to overlapping RF activity
+    // and panel charge-pump activity. During AP startup we only update cached display state;
+    // the next normal screen refresh will paint it. This avoids a brownout-style reboot caused
+    // by radio + e-paper + feedback power spikes landing together.
+    const bool suppress_refresh_for_ap =
+        event.ui_state.access_point_mode ||
+        event.state == wifi_service::State::kAccessPointMode;
+
     const esp_err_t status_bar_err =
-        s_startup_complete.load(std::memory_order_relaxed)
+        (!suppress_refresh_for_ap && s_startup_complete.load(std::memory_order_relaxed))
             ? status_bar_runtime::UpdateDisplayStateAndRequestRefresh(
                   display_service::RefreshRequest{
                       .refresh_mode = display_service::RefreshMode::kPartial,
@@ -1228,8 +1232,8 @@ void HandleWifiEvent(const wifi_service::Event& event, void*)
                  esp_err_to_name(status_bar_err));
     }
 
-    (void)SyncSettingsPageState(true);
-    (void)SyncWifiPageState(true);
+    (void)SyncSettingsPageState(!suppress_refresh_for_ap);
+    (void)SyncWifiPageState(!suppress_refresh_for_ap);
 }
 
 void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
