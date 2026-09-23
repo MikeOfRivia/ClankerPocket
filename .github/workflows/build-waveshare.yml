@@ -1,3 +1,4 @@
+# rebuild: yield during captive portal streaming
 # rebuild: stream captive portal assets
 # rebuild: restore input dispatcher stack headroom
 # rebuild: selected PSRAM task stacks
