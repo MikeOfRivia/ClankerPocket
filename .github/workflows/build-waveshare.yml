@@ -1,3 +1,4 @@
+# rebuild: preserve nvs with app-only update image + skip onboarding
 # rebuild: reload openai key from nvs + precise transcription errors
 # rebuild: move openai transcription worker to psram
 # rebuild: pocket clanker openai transcription + portal key
@@ -48,6 +49,18 @@ jobs:
           cp build/bootloader/bootloader.bin firmware-package/
           cp build/partition_table/partition-table.bin firmware-package/
           find build -maxdepth 1 -name '*.bin' -exec cp {} firmware-package/ \;
+
+          # Normal Pocket Clanker development flash: app partition only.
+          # Flashing this at 0x20000 preserves NVS (Wi-Fi, OpenAI key, timezone, etc.).
+          cp build/folloup_sticky.bin firmware-package/pocket-clanker-update.bin
+
+          cat > firmware-package/FLASH-UPDATE.txt <<'EOF'
+          Pocket Clanker update flash (preserves NVS/settings):
+          py -m esptool --chip esp32s3 --port COM4 write-flash 0x20000 .\pocket-clanker-update.bin
+
+          Factory/full flash (ERASES NVS/settings because the merged image spans 0x0 onward):
+          py -m esptool --chip esp32s3 --port COM4 write-flash 0x0 .\folloup-waveshare-full.bin
+          EOF
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
