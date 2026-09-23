@@ -1129,17 +1129,20 @@ void EnterAccessPointModeNow()
     ResolveInFlightScan(ESP_ERR_INVALID_STATE);
     InitializeStack();
     UpdateAccessPointIdentity();
-    CheckOrAbort(esp_timer_stop(s_connect_timer), "esp_timer_stop");
+
+    // AP transitions must never be allowed to abort/reboot the appliance. The previous
+    // implementation still had ESP_ERROR_CHECK calls around stop/set-mode/config/start, so any
+    // transient Wi-Fi driver state error turned a Settings toggle into a hard reset.
+    esp_err_t timer_err = esp_timer_stop(s_connect_timer);
+    if (timer_err != ESP_OK && timer_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(kTag, "AP transition: connect timer stop failed: %s", esp_err_to_name(timer_err));
+    }
 
     if (!GetUiState().wifi_enabled) {
         StopWifiNow();
         return;
     }
 
-    // Manual AP mode is intentionally AP-only. Keeping the station active here used APSTA,
-    // which has proven unreliable on this board during repeated development flashes: clients can
-    // associate to the SSID but fail to receive DHCP, and transitions can reboot the device.
-    // Saved station credentials remain untouched in NVS and are used again when AP mode is disabled.
     std::string ap_ssid;
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1154,17 +1157,69 @@ void EnterAccessPointModeNow()
         ap_ssid = s_ap_ssid;
     }
 
+    StopConfigPortal();
+
+    // If we were associated as a station, disconnect first and give the driver a beat to settle
+    // before stopping it. Failures are diagnostic only; none of these calls may reboot the board.
+    esp_err_t err = esp_wifi_disconnect();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT && err != ESP_ERR_WIFI_NOT_STARTED &&
+        err != ESP_ERR_WIFI_CONN) {
+        ESP_LOGW(kTag, "AP transition: station disconnect failed: %s", esp_err_to_name(err));
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    err = esp_wifi_stop();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT && err != ESP_ERR_WIFI_NOT_STARTED) {
+        ESP_LOGE(kTag, "AP transition: Wi-Fi stop failed: %s", esp_err_to_name(err));
+        {
+            std::lock_guard<std::mutex> lock(s_state_mutex);
+            s_suppress_disconnect_event = false;
+            s_access_point_mode = false;
+        }
+        Notify(State::kDisconnected, "AP_STOP_FAILED");
+        return;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    ESP_LOGI(kTag, "Starting manual setup AP in AP-only mode");
+    err = esp_wifi_set_mode(WIFI_MODE_AP);
+    if (err != ESP_OK) {
+        ESP_LOGE(kTag, "AP transition: set mode failed: %s", esp_err_to_name(err));
+        {
+            std::lock_guard<std::mutex> lock(s_state_mutex);
+            s_suppress_disconnect_event = false;
+            s_access_point_mode = false;
+        }
+        Notify(State::kDisconnected, "AP_MODE_FAILED");
+        return;
+    }
+
     wifi_config_t config = {};
     ConfigureAccessPointConfig(ap_ssid, &config);
-
-    esp_err_t err = esp_wifi_stop();
-    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT && err != ESP_ERR_WIFI_NOT_STARTED) {
-        ESP_ERROR_CHECK(err);
+    err = esp_wifi_set_config(WIFI_IF_AP, &config);
+    if (err != ESP_OK) {
+        ESP_LOGE(kTag, "AP transition: set config failed: %s", esp_err_to_name(err));
+        {
+            std::lock_guard<std::mutex> lock(s_state_mutex);
+            s_suppress_disconnect_event = false;
+            s_access_point_mode = false;
+        }
+        Notify(State::kDisconnected, "AP_CONFIG_FAILED");
+        return;
     }
-    ESP_LOGI(kTag, "Starting manual setup AP in AP-only mode");
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+
+    err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(kTag, "AP transition: Wi-Fi start failed: %s", esp_err_to_name(err));
+        {
+            std::lock_guard<std::mutex> lock(s_state_mutex);
+            s_suppress_disconnect_event = false;
+            s_access_point_mode = false;
+        }
+        Notify(State::kDisconnected, "AP_START_FAILED");
+        return;
+    }
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
