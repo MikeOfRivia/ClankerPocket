@@ -97,6 +97,8 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
         transcription_snapshot.initialized && transcription_snapshot.provider_ready;
     state.transcription_in_flight = transcription_snapshot.request_in_flight;
     state.last_openai_http_status = transcription_snapshot.last_http_status;
+    state.transcription_error_code = transcription_snapshot.last_error_code;
+    state.transcription_error_message = transcription_snapshot.last_error_message;
     state.free_internal_heap_bytes = free_internal_heap_bytes;
     state.free_psram_bytes = free_psram_bytes;
     state.reset_reason = reset_reason;
