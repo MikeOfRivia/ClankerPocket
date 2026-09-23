@@ -5,6 +5,7 @@
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_system.h"
 #include "page_navigation/navigation_model.h"
 #include "page_navigation/page_focus_projection.h"
 #include "settings_page_interactions.h"
@@ -22,6 +23,34 @@ constexpr const char* kTag = "SettingsPageRuntime";
 std::mutex s_mutex;
 SettingsPageCoordinator s_coordinator = {};
 int32_t s_interaction_generation = 1;
+
+epaper_ui::ResetReasonDisplay CurrentResetReasonDisplay()
+{
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:
+            return epaper_ui::ResetReasonDisplay::kPowerOn;
+        case ESP_RST_SW:
+            return epaper_ui::ResetReasonDisplay::kSoftware;
+        case ESP_RST_PANIC:
+            return epaper_ui::ResetReasonDisplay::kPanic;
+        case ESP_RST_INT_WDT:
+            return epaper_ui::ResetReasonDisplay::kInterruptWatchdog;
+        case ESP_RST_TASK_WDT:
+            return epaper_ui::ResetReasonDisplay::kTaskWatchdog;
+        case ESP_RST_WDT:
+            return epaper_ui::ResetReasonDisplay::kWatchdog;
+        case ESP_RST_DEEPSLEEP:
+            return epaper_ui::ResetReasonDisplay::kDeepSleep;
+        case ESP_RST_BROWNOUT:
+            return epaper_ui::ResetReasonDisplay::kBrownout;
+#if defined(ESP_RST_USB)
+        case ESP_RST_USB:
+            return epaper_ui::ResetReasonDisplay::kUsb;
+#endif
+        default:
+            return epaper_ui::ResetReasonDisplay::kUnknown;
+    }
+}
 
 void AdvanceInteractionGenerationLocked()
 {
@@ -109,7 +138,8 @@ epaper_ui::SettingsPageState BuildStateLocked()
         storage_service::GetSnapshot(),
         transcription_service::GetSnapshot(),
         static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
-        static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
+        static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)),
+        CurrentResetReasonDisplay());
 }
 
 }  // namespace
