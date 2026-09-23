@@ -5,6 +5,7 @@
 #include "page_navigation/navigation_model.h"
 #include "page_navigation/roving_focus.h"
 #include "storage_service.h"
+#include "transcription_service.h"
 #include "wifi_service.h"
 
 class SettingsPageCoordinator {
@@ -16,8 +17,12 @@ public:
     bool SetFocusIndex(int index);
     bool IsRoleFocused(page_navigation::NavigationItemRole role) const;
 
-    epaper_ui::SettingsPageState BuildState(const wifi_service::UiState& wifi_state,
-                                            const storage_service::Snapshot& storage_snapshot) const;
+    epaper_ui::SettingsPageState BuildState(
+        const wifi_service::UiState& wifi_state,
+        const storage_service::Snapshot& storage_snapshot,
+        const transcription_service::Snapshot& transcription_snapshot,
+        uint32_t free_internal_heap_bytes,
+        uint32_t free_psram_bytes) const;
 
     const page_navigation::NavigationModel& navigation_model() const { return navigation_model_; }
     const page_navigation::RovingFocus& focus() const { return focus_; }
