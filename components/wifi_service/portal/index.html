@@ -20,6 +20,10 @@ small{color:#666}
 <select id="net"><option value="">Select network</option></select>
 <input id="pass" type="password" placeholder="Wi-Fi password">
 <button id="connect">Connect</button>
+<h2>Pocket Clanker</h2>
+<small id="aiState">Checking OpenAI configuration...</small>
+<input id="openaiKey" type="password" autocomplete="off" placeholder="OpenAI API key">
+<button id="saveOpenAI">Save OpenAI Key</button>
 <div id="msg"></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -52,6 +56,24 @@ async function scan(){
     show("Scan timed out");
   }catch(e){show("Scan failed: "+e.message)}
 }
+async function openaiStatus(){
+  try{
+    const j=await api("/api/settings/openai");
+    $("aiState").textContent=j.configured?("OpenAI key configured ••••"+j.last4):"OpenAI key not configured";
+    return j;
+  }catch(e){$("aiState").textContent="OpenAI status unavailable"}
+}
+async function saveOpenAI(){
+  const key=$("openaiKey").value.trim();
+  if(!key){show("Enter an OpenAI API key first.");return}
+  show("Saving OpenAI key...");
+  try{
+    const j=await api("/api/settings/openai",{method:"POST",body:JSON.stringify({api_key:key})});
+    $("openaiKey").value="";
+    $("aiState").textContent="OpenAI key configured ••••"+(j.last4||"");
+    show("OpenAI key saved.");
+  }catch(e){show("OpenAI save failed: "+e.message)}
+}
 async function connect(){
   const ssid=$("net").value;if(!ssid){show("Select a network first");return}
   show("Connecting to "+ssid+"...");
@@ -61,7 +83,7 @@ async function connect(){
     show("Connection still in progress.");
   }catch(e){show("Connect failed: "+e.message)}
 }
-$("scan").onclick=scan;$("connect").onclick=connect;$("refresh").onclick=status;status();
+$("scan").onclick=scan;$("connect").onclick=connect;$("refresh").onclick=status;$("saveOpenAI").onclick=saveOpenAI;status();openaiStatus();
 </script>
 </body>
 </html>
