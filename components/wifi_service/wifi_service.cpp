@@ -316,8 +316,7 @@ esp_err_t EnsureAccessPointNetwork()
     } else if (dhcp_status == ESP_NETIF_DHCP_STARTED) {
         err = esp_netif_dhcps_stop(s_ap_netif);
         if (err != ESP_OK) {
-            ESP_LOGE(kTag, "Failed to stop AP DHCP before reset: %s", esp_err_to_name(err));
-            return err;
+            ESP_LOGW(kTag, "Could not stop AP DHCP before reset: %s", esp_err_to_name(err));
         }
     }
 
@@ -328,14 +327,12 @@ esp_err_t EnsureAccessPointNetwork()
 
     err = esp_netif_set_ip_info(s_ap_netif, &ip_info);
     if (err != ESP_OK) {
-        ESP_LOGE(kTag, "Failed to set AP IP info: %s", esp_err_to_name(err));
-        return err;
+        ESP_LOGW(kTag, "Failed to set AP IP info: %s", esp_err_to_name(err));
     }
 
-    err = esp_netif_dhcps_start(s_ap_netif);
-    if (err != ESP_OK) {
-        ESP_LOGE(kTag, "Failed to start AP DHCP: %s", esp_err_to_name(err));
-        return err;
+    esp_err_t dhcp_start_err = esp_netif_dhcps_start(s_ap_netif);
+    if (dhcp_start_err != ESP_OK) {
+        ESP_LOGW(kTag, "Failed to start AP DHCP: %s", esp_err_to_name(dhcp_start_err));
     }
 
     esp_netif_dhcp_status_t verified_status = ESP_NETIF_DHCP_INIT;
@@ -348,7 +345,10 @@ esp_err_t EnsureAccessPointNetwork()
              IP2STR(&verified_ip.ip),
              verified_status == ESP_NETIF_DHCP_STARTED ? "started" : "NOT STARTED");
 
-    return verified_status == ESP_NETIF_DHCP_STARTED ? ESP_OK : ESP_FAIL;
+    if (verified_status == ESP_NETIF_DHCP_STARTED) {
+        return ESP_OK;
+    }
+    return dhcp_start_err != ESP_OK ? dhcp_start_err : (err != ESP_OK ? err : ESP_FAIL);
 }
 
 bool LoadString(nvs_handle_t handle, const char* key, std::string* out)
@@ -1226,7 +1226,13 @@ void EnterAccessPointModeNow()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(EnsureAccessPointNetwork());
+    {
+        const esp_err_t ap_net_err = EnsureAccessPointNetwork();
+        if (ap_net_err != ESP_OK) {
+            ESP_LOGE(kTag, "AP network repair failed without rebooting: %s",
+                     esp_err_to_name(ap_net_err));
+        }
+    }
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1292,7 +1298,13 @@ void StartStationAttempt(bool allow_ap_fallback)
         }
         ESP_ERROR_CHECK(esp_wifi_start());
         if (access_point_mode) {
-            ESP_ERROR_CHECK(EnsureAccessPointNetwork());
+            {
+        const esp_err_t ap_net_err = EnsureAccessPointNetwork();
+        if (ap_net_err != ESP_OK) {
+            ESP_LOGE(kTag, "AP network repair failed without rebooting: %s",
+                     esp_err_to_name(ap_net_err));
+        }
+    }
         }
 
         {
@@ -1346,7 +1358,13 @@ void StartStationAttempt(bool allow_ap_fallback)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &station_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     if (access_point_mode) {
-        ESP_ERROR_CHECK(EnsureAccessPointNetwork());
+        {
+        const esp_err_t ap_net_err = EnsureAccessPointNetwork();
+        if (ap_net_err != ESP_OK) {
+            ESP_LOGE(kTag, "AP network repair failed without rebooting: %s",
+                     esp_err_to_name(ap_net_err));
+        }
+    }
     }
 
     {
