@@ -1,3 +1,4 @@
+# rebuild: repair AP DHCP/network bring-up
 # rebuild: add Pocket Clanker on-device status diagnostics
 # rebuild: preserve nvs with app-only update image + skip onboarding
 # rebuild: reload openai key from nvs + precise transcription errors
