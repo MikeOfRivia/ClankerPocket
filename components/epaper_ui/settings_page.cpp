@@ -58,7 +58,7 @@ Layout BuildLayout(int portrait_width, int portrait_height, const SettingsPageSt
     const int pocket_status_first_line_y =
         pocket_status_heading_y + LineHeight(kSectionRole) + kStatusBlockGap;
     const int pocket_status_bottom =
-        pocket_status_first_line_y + (6 * status_line_height) + (5 * kStatusLineGap);
+        pocket_status_first_line_y + (8 * status_line_height) + (7 * kStatusLineGap);
 
     const int storage_heading_y = pocket_status_bottom + kSectionGap;
     SdStatusStyle storage_style = {};
@@ -344,6 +344,25 @@ void DrawSettingsPage(uint8_t* framebuffer,
     }
     std::snprintf(status_buffer, sizeof(status_buffer), "Last reset: %s", reset_reason_text);
     draw_status_line(5, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "TX error: %s",
+                  state.transcription_error_code.empty()
+                      ? "--"
+                      : state.transcription_error_code.c_str());
+    draw_status_line(6, status_buffer);
+
+    std::string error_message = state.transcription_error_message;
+    if (error_message.size() > 58) {
+        error_message.resize(58);
+        error_message += "...";
+    }
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "TX detail: %s",
+                  error_message.empty() ? "--" : error_message.c_str());
+    draw_status_line(7, status_buffer);
 
     DrawTypographyText(framebuffer,
                        raw_width,
