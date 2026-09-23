@@ -48,9 +48,9 @@ constexpr int64_t kScanTimeoutUs = 12 * 1000 * 1000;
 constexpr int kScanStartAttempts = 5;
 constexpr uint32_t kScanStartRetryDelayMs = 100;
 constexpr size_t kMaxPortalPayloadLen = 512;
-constexpr uint32_t kTransitionTaskStackWords = 4096;
+constexpr uint32_t kTransitionTaskStackWords = 6144;
 constexpr UBaseType_t kTransitionQueueDepth = 4;
-constexpr uint32_t kCallbackTaskStackWords = 3072;
+constexpr uint32_t kCallbackTaskStackWords = 4096;
 constexpr size_t kMaxPendingCallbacks = 16;
 constexpr const char* kPortalApiScanUri = "/api/scan";
 constexpr const char* kPortalApiConfigureUri = "/api/configure";
@@ -693,7 +693,7 @@ void StartCaptiveDns()
     setsockopt(s_dns_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     s_dns_stop.store(false, std::memory_order_relaxed);
-    if (xTaskCreate(CaptiveDnsTask, "captive_dns", 2048, nullptr, 5, &s_dns_task) != pdPASS) {
+    if (xTaskCreate(CaptiveDnsTask, "captive_dns", 3072, nullptr, 5, &s_dns_task) != pdPASS) {
         ESP_LOGW(kTag, "Captive DNS task create failed");
         close(s_dns_socket);
         s_dns_socket = -1;
