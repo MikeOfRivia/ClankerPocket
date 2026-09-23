@@ -12,6 +12,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -620,16 +621,19 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
     task_context->clip = std::move(clip);
 
     TaskHandle_t task = nullptr;
-    const BaseType_t created = xTaskCreatePinnedToCore(
+    // This board is already tight on internal SRAM. The transcription worker needs a large
+    // TLS/HTTP stack, so put that stack in PSRAM rather than consuming ~32 KB of internal RAM.
+    const BaseType_t created = xTaskCreatePinnedToCoreWithCaps(
         WorkerTask, "transcription", kWorkerTaskStackWords, task_context,
-        followup_task_config::kPriorityGemini, &task, followup_task_config::kSystemCore);
+        followup_task_config::kPriorityGemini, &task, followup_task_config::kSystemCore,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (created != pdPASS) {
         delete task_context;
         std::lock_guard<std::mutex> lock(s_mutex);
         s_request_in_flight = false;
-        s_last_status_message = "Transcription unavailable";
+        s_last_status_message = "Transcription worker failed";
         s_last_error_code = "task_start_failed";
-        s_last_error_message = "Failed to queue transcription task";
+        s_last_error_message = "Failed to allocate/start transcription worker task";
         NotifyLocked();
         return false;
     }
