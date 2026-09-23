@@ -22,7 +22,8 @@ public:
         const storage_service::Snapshot& storage_snapshot,
         const transcription_service::Snapshot& transcription_snapshot,
         uint32_t free_internal_heap_bytes,
-        uint32_t free_psram_bytes) const;
+        uint32_t free_psram_bytes,
+        epaper_ui::ResetReasonDisplay reset_reason) const;
 
     const page_navigation::NavigationModel& navigation_model() const { return navigation_model_; }
     const page_navigation::RovingFocus& focus() const { return focus_; }
