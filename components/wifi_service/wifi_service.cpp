@@ -297,6 +297,60 @@ void ConfigureStationConfig(const Credentials& credentials, wifi_config_t* confi
     config->sta.pmf_cfg.required = false;
 }
 
+// The default AP netif is supposed to carry 192.168.4.1/24 with DHCP enabled, but repeated
+// AP <-> STA/APSTA transitions can leave the DHCP server stopped while the SSID is still visible.
+// That produces the exact failure mode we saw on Windows: association succeeds, but the client
+// self-assigns 169.254.x.x and has no gateway. Make AP networking deterministic every time we
+// bring the AP up instead of relying on the default netif lifecycle to recover it.
+esp_err_t EnsureAccessPointNetwork()
+{
+    if (s_ap_netif == nullptr) {
+        ESP_LOGE(kTag, "AP netif is null");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_netif_dhcp_status_t dhcp_status = ESP_NETIF_DHCP_INIT;
+    esp_err_t err = esp_netif_dhcps_get_status(s_ap_netif, &dhcp_status);
+    if (err != ESP_OK) {
+        ESP_LOGW(kTag, "Failed to read AP DHCP status: %s", esp_err_to_name(err));
+    } else if (dhcp_status == ESP_NETIF_DHCP_STARTED) {
+        err = esp_netif_dhcps_stop(s_ap_netif);
+        if (err != ESP_OK) {
+            ESP_LOGE(kTag, "Failed to stop AP DHCP before reset: %s", esp_err_to_name(err));
+            return err;
+        }
+    }
+
+    esp_netif_ip_info_t ip_info = {};
+    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+
+    err = esp_netif_set_ip_info(s_ap_netif, &ip_info);
+    if (err != ESP_OK) {
+        ESP_LOGE(kTag, "Failed to set AP IP info: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = esp_netif_dhcps_start(s_ap_netif);
+    if (err != ESP_OK) {
+        ESP_LOGE(kTag, "Failed to start AP DHCP: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    esp_netif_dhcp_status_t verified_status = ESP_NETIF_DHCP_INIT;
+    (void)esp_netif_dhcps_get_status(s_ap_netif, &verified_status);
+
+    esp_netif_ip_info_t verified_ip = {};
+    (void)esp_netif_get_ip_info(s_ap_netif, &verified_ip);
+    ESP_LOGI(kTag,
+             "AP network ready: " IPSTR " DHCP=%s",
+             IP2STR(&verified_ip.ip),
+             verified_status == ESP_NETIF_DHCP_STARTED ? "started" : "NOT STARTED");
+
+    return verified_status == ESP_NETIF_DHCP_STARTED ? ESP_OK : ESP_FAIL;
+}
+
 bool LoadString(nvs_handle_t handle, const char* key, std::string* out)
 {
     if (out == nullptr) {
@@ -1172,6 +1226,7 @@ void EnterAccessPointModeNow()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
     ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(EnsureAccessPointNetwork());
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1236,6 +1291,9 @@ void StartStationAttempt(bool allow_ap_fallback)
             ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
         }
         ESP_ERROR_CHECK(esp_wifi_start());
+        if (access_point_mode) {
+            ESP_ERROR_CHECK(EnsureAccessPointNetwork());
+        }
 
         {
             std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1287,6 +1345,9 @@ void StartStationAttempt(bool allow_ap_fallback)
     }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &station_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+    if (access_point_mode) {
+        ESP_ERROR_CHECK(EnsureAccessPointNetwork());
+    }
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
