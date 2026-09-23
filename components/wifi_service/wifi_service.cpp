@@ -719,9 +719,26 @@ esp_err_t SendEmbeddedAsset(httpd_req_t* request, const uint8_t* start, const ui
 {
     httpd_resp_set_status(request, HTTPD_200);
     httpd_resp_set_type(request, content_type);
-    const ssize_t length = end - start;
-    return httpd_resp_send(request, reinterpret_cast<const char*>(start),
-                           length > 0 ? length : 0);
+
+    // Stream larger embedded assets instead of handing the entire buffer to
+    // httpd_resp_send() at once. The portal HTML is only ~4 KB and succeeds,
+    // while the CSS (~8 KB) and JS (~100 KB) were causing the connection to
+    // close with an empty reply on the Waveshare build.
+    constexpr size_t kChunkSize = 1024;
+    const uint8_t* cursor = start;
+    while (cursor < end) {
+        const size_t remaining = static_cast<size_t>(end - cursor);
+        const size_t chunk_size = std::min(kChunkSize, remaining);
+        const esp_err_t err = httpd_resp_send_chunk(
+            request, reinterpret_cast<const char*>(cursor), chunk_size);
+        if (err != ESP_OK) {
+            ESP_LOGE(kTag, "Failed to stream portal asset chunk: %s", esp_err_to_name(err));
+            return err;
+        }
+        cursor += chunk_size;
+    }
+
+    return httpd_resp_send_chunk(request, nullptr, 0);
 }
 
 esp_err_t HandlePortalRoot(httpd_req_t* request)
