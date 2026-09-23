@@ -776,13 +776,10 @@ void HandleRecordingEvent(const recording_service::Event& event)
             }
         } else if (event.state == recording_service::State::kClipReady) {
             if (should_show_tag_selection) {
-                // Stop cue first, then playback, then the tag menu. HandleStopCueResult
-                // drives the rest; queue_stop_cue defers the PlayCue call until the lock
-                // is released so the callback cannot deadlock on a fast cue.
-                cue_token = ++s_cue_token;
-                queue_stop_cue = true;
-                s_snapshot.phase = Phase::kStopCue;
-                s_snapshot.last_status_message = kStopCueStatus;
+                // Pocket Clanker mode: skip replay/tagging and hand the captured clip directly
+                // to transcription. The clip stays in RAM only for the lifetime of the request.
+                s_snapshot.phase = Phase::kSaving;
+                s_snapshot.last_status_message = "Preparing transcription";
                 s_snapshot.last_error_code.clear();
                 s_snapshot.last_error_message.clear();
             } else {
@@ -799,12 +796,32 @@ void HandleRecordingEvent(const recording_service::Event& event)
     }
     if (discard_invalid_clip) {
         recording_service::DiscardClip();
+        return;
     }
-    if (queue_stop_cue) {
-        SystemSoundService::GetInstance().PlayCue(
-            SoundCue::kInterrupt, [cue_token](SoundCuePlaybackResult result) {
-                HandleStopCueResult(cue_token, result);
-            });
+
+    if (event.state == recording_service::State::kClipReady && should_show_tag_selection && clip) {
+        if (transcription_service::BeginTranscription(clip)) {
+            std::lock_guard<std::mutex> lock(s_mutex);
+            s_snapshot.phase = Phase::kTranscribing;
+            s_snapshot.request_in_flight = true;
+            s_snapshot.last_status_message = kTranscribingStatus;
+            s_snapshot.last_error_code.clear();
+            s_snapshot.last_error_message.clear();
+            NotifyLocked();
+            return;
+        }
+
+        const transcription_service::Snapshot ts = transcription_service::GetSnapshot();
+        recording_service::DiscardClip();
+        std::lock_guard<std::mutex> lock(s_mutex);
+        s_snapshot.phase = Phase::kFailed;
+        s_snapshot.has_clip = false;
+        s_snapshot.request_in_flight = false;
+        s_snapshot.last_status_message =
+            ts.last_status_message.empty() ? "Transcription unavailable" : ts.last_status_message;
+        s_snapshot.last_error_code = ts.last_error_code;
+        s_snapshot.last_error_message = ts.last_error_message;
+        NotifyLocked();
     }
 }
 
@@ -814,67 +831,43 @@ void HandleTranscriptionEvent(const transcription_service::Event& event)
         return;
     }
 
-    bool should_attach_transcript = false;
-    std::string pending_recording_id;
-    std::string transcript_text;
+    bool completed = false;
     {
         std::lock_guard<std::mutex> lock(s_mutex);
         s_snapshot.request_in_flight = event.snapshot.request_in_flight;
-        if (s_snapshot.phase == Phase::kTranscribing && !event.snapshot.request_in_flight &&
-            !event.snapshot.last_transcript.empty() && !s_pending_recording_id.empty()) {
-            should_attach_transcript = true;
-            pending_recording_id = s_pending_recording_id;
-            transcript_text = event.snapshot.last_transcript;
+        if (s_snapshot.phase != Phase::kTranscribing || event.snapshot.request_in_flight) {
+            NotifyLocked();
+            return;
         }
-    }
 
-    if (should_attach_transcript) {
-        ESP_LOGI(kTag,
-                 "Attaching transcript to saved recording: id=%s chars=%u",
-                 pending_recording_id.c_str(),
-                 static_cast<unsigned>(transcript_text.size()));
-        const recording_archive_service::SaveResult save_result =
-            recording_archive_service::SaveTranscript(pending_recording_id, transcript_text);
-        ESP_LOGI(kTag,
-                 "Transcript save result: success=%d transcript_saved=%d metadata_saved=%d transcript=%s metadata=%s error=%s",
-                 save_result.success ? 1 : 0,
-                 save_result.transcript_saved ? 1 : 0,
-                 save_result.metadata_saved ? 1 : 0,
-                 save_result.transcript_path.empty() ? "<none>" : save_result.transcript_path.c_str(),
-                 save_result.metadata_path.empty() ? "<none>" : save_result.metadata_path.c_str(),
-                 save_result.error_code.empty() ? "<none>" : save_result.error_code.c_str());
-        std::lock_guard<std::mutex> lock(s_mutex);
-        s_snapshot.transcript_saved = save_result.transcript_saved;
-        s_snapshot.last_saved_transcript_path = save_result.transcript_path;
-        s_snapshot.last_transcript = transcript_text;
-        s_snapshot.phase = Phase::kComplete;
-        s_snapshot.request_in_flight = false;
-        s_snapshot.last_status_message = save_result.transcript_saved
-                                             ? "Transcript saved to SD"
-                                             : kSavedWithoutTranscriptStatus;
-        if (save_result.transcript_saved) {
-            s_snapshot.last_error_code = save_result.error_code;
-            s_snapshot.last_error_message = save_result.error_message;
+        if (!event.snapshot.last_transcript.empty()) {
+            s_snapshot.phase = Phase::kComplete;
+            s_snapshot.has_clip = false;
+            s_snapshot.clip_saved = false;
+            s_snapshot.transcript_saved = false;
+            s_snapshot.last_transcript = event.snapshot.last_transcript;
+            s_snapshot.last_status_message = "Transcript ready";
+            s_snapshot.last_error_code.clear();
+            s_snapshot.last_error_message.clear();
+            completed = true;
         } else {
+            s_snapshot.phase = Phase::kFailed;
+            s_snapshot.last_status_message =
+                event.snapshot.last_status_message.empty() ? "Transcription failed"
+                                                           : event.snapshot.last_status_message;
             s_snapshot.last_error_code = event.snapshot.last_error_code;
             s_snapshot.last_error_message = event.snapshot.last_error_message;
         }
-        s_pending_recording_id.clear();
         NotifyLocked();
-        return;
     }
 
-    std::lock_guard<std::mutex> lock(s_mutex);
-    if (s_snapshot.phase == Phase::kTranscribing && !event.snapshot.request_in_flight) {
-        s_snapshot.phase = s_snapshot.clip_saved ? Phase::kComplete : Phase::kFailed;
-        s_snapshot.last_status_message = s_snapshot.clip_saved
-                                             ? kSavedWithoutTranscriptStatus
-                                             : "Transcription failed";
-        s_snapshot.last_error_code = event.snapshot.last_error_code;
-        s_snapshot.last_error_message = event.snapshot.last_error_message;
-        s_pending_recording_id.clear();
+    // Pocket Clanker does not archive every utterance by default. Release the in-memory
+    // recording once transcription has completed (successfully or otherwise).
+    recording_service::DiscardClip();
+    if (completed) {
+        ESP_LOGI(kTag, "Pocket Clanker transcript ready: chars=%u",
+                 static_cast<unsigned>(event.snapshot.last_transcript.size()));
     }
-    NotifyLocked();
 }
 
 const char* PhaseName(Phase phase)
