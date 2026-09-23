@@ -65,7 +65,8 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
     const storage_service::Snapshot& storage_snapshot,
     const transcription_service::Snapshot& transcription_snapshot,
     uint32_t free_internal_heap_bytes,
-    uint32_t free_psram_bytes) const
+    uint32_t free_psram_bytes,
+    epaper_ui::ResetReasonDisplay reset_reason) const
 {
     storage_service::StorageStats storage_stats = {};
     const bool allow_live_storage_stats =
@@ -98,6 +99,7 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
     state.last_openai_http_status = transcription_snapshot.last_http_status;
     state.free_internal_heap_bytes = free_internal_heap_bytes;
     state.free_psram_bytes = free_psram_bytes;
+    state.reset_reason = reset_reason;
 
     state.storage_status.has_sd_card =
         storage_snapshot.inserted && storage_snapshot.mounted && has_storage_stats;
