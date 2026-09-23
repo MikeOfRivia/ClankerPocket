@@ -4,11 +4,13 @@
 #include <mutex>
 
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "page_navigation/navigation_model.h"
 #include "page_navigation/page_focus_projection.h"
 #include "settings_page_interactions.h"
 #include "settings_page_coordinator.h"
 #include "storage_service.h"
+#include "transcription_service.h"
 #include "ui_refresh_runtime.h"
 #include "wifi_service.h"
 
@@ -102,7 +104,12 @@ bool FooterProjectionChangedForFocusIndexes(int old_focus_index, int new_focus_i
 
 epaper_ui::SettingsPageState BuildStateLocked()
 {
-    return s_coordinator.BuildState(wifi_service::GetUiState(), storage_service::GetSnapshot());
+    return s_coordinator.BuildState(
+        wifi_service::GetUiState(),
+        storage_service::GetSnapshot(),
+        transcription_service::GetSnapshot(),
+        static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+        static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
 }
 
 }  // namespace
