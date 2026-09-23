@@ -58,7 +58,7 @@ Layout BuildLayout(int portrait_width, int portrait_height, const SettingsPageSt
     const int pocket_status_first_line_y =
         pocket_status_heading_y + LineHeight(kSectionRole) + kStatusBlockGap;
     const int pocket_status_bottom =
-        pocket_status_first_line_y + (5 * status_line_height) + (4 * kStatusLineGap);
+        pocket_status_first_line_y + (6 * status_line_height) + (5 * kStatusLineGap);
 
     const int storage_heading_y = pocket_status_bottom + kSectionGap;
     SdStatusStyle storage_style = {};
@@ -308,6 +308,42 @@ void DrawSettingsPage(uint8_t* framebuffer,
                   static_cast<unsigned long>(state.free_internal_heap_bytes / 1024U),
                   static_cast<unsigned long>(state.free_psram_bytes / 1024U));
     draw_status_line(4, status_buffer);
+
+    const char* reset_reason_text = "Unknown";
+    switch (state.reset_reason) {
+        case ResetReasonDisplay::kPowerOn:
+            reset_reason_text = "Power-on";
+            break;
+        case ResetReasonDisplay::kSoftware:
+            reset_reason_text = "Software";
+            break;
+        case ResetReasonDisplay::kPanic:
+            reset_reason_text = "PANIC";
+            break;
+        case ResetReasonDisplay::kInterruptWatchdog:
+            reset_reason_text = "Interrupt watchdog";
+            break;
+        case ResetReasonDisplay::kTaskWatchdog:
+            reset_reason_text = "Task watchdog";
+            break;
+        case ResetReasonDisplay::kWatchdog:
+            reset_reason_text = "Watchdog";
+            break;
+        case ResetReasonDisplay::kDeepSleep:
+            reset_reason_text = "Deep sleep";
+            break;
+        case ResetReasonDisplay::kBrownout:
+            reset_reason_text = "BROWNOUT";
+            break;
+        case ResetReasonDisplay::kUsb:
+            reset_reason_text = "USB";
+            break;
+        case ResetReasonDisplay::kUnknown:
+        default:
+            break;
+    }
+    std::snprintf(status_buffer, sizeof(status_buffer), "Last reset: %s", reset_reason_text);
+    draw_status_line(5, status_buffer);
 
     DrawTypographyText(framebuffer,
                        raw_width,
