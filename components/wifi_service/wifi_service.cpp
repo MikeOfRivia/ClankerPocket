@@ -724,7 +724,7 @@ esp_err_t SendEmbeddedAsset(httpd_req_t* request, const uint8_t* start, const ui
     // httpd_resp_send() at once. The portal HTML is only ~4 KB and succeeds,
     // while the CSS (~8 KB) and JS (~100 KB) were causing the connection to
     // close with an empty reply on the Waveshare build.
-    constexpr size_t kChunkSize = 1024;
+    constexpr size_t kChunkSize = 256;
     const uint8_t* cursor = start;
     while (cursor < end) {
         const size_t remaining = static_cast<size_t>(end - cursor);
@@ -741,7 +741,7 @@ esp_err_t SendEmbeddedAsset(httpd_req_t* request, const uint8_t* start, const ui
         // yielding, the handler can fill the socket faster than the AP stack
         // can transmit it; send() then returns EAGAIN (errno 11) and the
         // browser receives a truncated asset.
-        vTaskDelay(1);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     return httpd_resp_send_chunk(request, nullptr, 0);
@@ -895,6 +895,9 @@ void StartConfigPortal()
     // the timezone_service and gemini_service portal routes registered via the registrar below.
     config.max_uri_handlers = 24;
     config.lru_purge_enable = true;
+    // The Waveshare AP can take longer to drain TCP buffers while serving the
+    // embedded portal. Give send() more room before lwIP returns EAGAIN.
+    config.send_wait_timeout = 30;
 
     esp_err_t err = httpd_start(&s_portal_server, &config);
     if (err != ESP_OK) {
