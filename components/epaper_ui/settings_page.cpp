@@ -1,6 +1,7 @@
 #include "epaper_ui/settings_page.h"
 
 #include <algorithm>
+#include <cstdio>
 
 #include "render_utils.h"
 
@@ -14,6 +15,8 @@ constexpr int kTopGap = design::spacing::k16;
 constexpr int kTitleBottomGap = design::spacing::k24;
 constexpr int kNetworkHeadingGap = 0;
 constexpr int kSectionGap = design::spacing::k24;
+constexpr int kStatusLineGap = design::spacing::k8;
+constexpr int kStatusBlockGap = design::spacing::k12;
 constexpr int kStorageStatusGap = design::spacing::k12;
 constexpr int kStorageButtonTopGap = design::spacing::k16;
 constexpr int kButtonStackGap = design::spacing::k12;
@@ -21,6 +24,8 @@ constexpr int kButtonStackGap = design::spacing::k12;
 struct Layout {
     UiRect wifi_toggle = {};
     UiRect access_point_toggle = {};
+    int pocket_status_heading_y = 0;
+    int pocket_status_first_line_y = 0;
     UiRect storage_status = {};
     UiRect enable_otg_button = {};
     UiRect format_sd_button = {};
@@ -48,7 +53,14 @@ Layout BuildLayout(int portrait_width, int portrait_height, const SettingsPageSt
     const UiRect access_point_toggle =
         MenuToggleBounds(page_x, wifi_toggle.bottom(), access_point_style);
 
-    const int storage_heading_y = access_point_toggle.bottom() + kSectionGap;
+    const int pocket_status_heading_y = access_point_toggle.bottom() + kSectionGap;
+    const int status_line_height = LineHeight(design::TypographyRole::kBodySmall);
+    const int pocket_status_first_line_y =
+        pocket_status_heading_y + LineHeight(kSectionRole) + kStatusBlockGap;
+    const int pocket_status_bottom =
+        pocket_status_first_line_y + (5 * status_line_height) + (4 * kStatusLineGap);
+
+    const int storage_heading_y = pocket_status_bottom + kSectionGap;
     SdStatusStyle storage_style = {};
     storage_style.max_width = page_width;
     const UiRect storage_status = SdStatusBounds(page_x,
@@ -78,6 +90,8 @@ Layout BuildLayout(int portrait_width, int portrait_height, const SettingsPageSt
     return {
         .wifi_toggle = wifi_toggle,
         .access_point_toggle = access_point_toggle,
+        .pocket_status_heading_y = pocket_status_heading_y,
+        .pocket_status_first_line_y = pocket_status_first_line_y,
         .storage_status = storage_status,
         .enable_otg_button = enable_otg_button,
         .format_sd_button = format_sd_button,
@@ -226,6 +240,74 @@ void DrawSettingsPage(uint8_t* framebuffer,
                    layout.access_point_toggle.y,
                    state.access_point_toggle,
                    access_point_style);
+
+    DrawTypographyText(framebuffer,
+                       raw_width,
+                       raw_height,
+                       portrait_width,
+                       portrait_height,
+                       title_x,
+                       layout.pocket_status_heading_y,
+                       "Pocket Clanker Status",
+                       kSectionRole,
+                       design::color::kBlack);
+
+    const auto draw_status_line = [&](int line_index, const char* text) {
+        const int line_height = LineHeight(design::TypographyRole::kBodySmall);
+        DrawTypographyText(framebuffer,
+                           raw_width,
+                           raw_height,
+                           portrait_width,
+                           portrait_height,
+                           title_x,
+                           layout.pocket_status_first_line_y +
+                               line_index * (line_height + kStatusLineGap),
+                           text,
+                           design::TypographyRole::kBodySmall,
+                           design::color::kBlack);
+    };
+
+    char status_buffer[96] = {};
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "WiFi: %s",
+                  state.wifi_connected ? "Connected" : "Not connected");
+    draw_status_line(0, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "OpenAI key: %s",
+                  state.openai_key_configured ? "Configured" : "MISSING");
+    draw_status_line(1, status_buffer);
+
+    const char* transcription_state = "Not ready";
+    if (state.transcription_in_flight) {
+        transcription_state = "Transcribing";
+    } else if (state.transcription_ready) {
+        transcription_state = "Ready";
+    }
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Transcription: %s",
+                  transcription_state);
+    draw_status_line(2, status_buffer);
+
+    if (state.last_openai_http_status > 0) {
+        std::snprintf(status_buffer,
+                      sizeof(status_buffer),
+                      "Last OpenAI HTTP: %d",
+                      state.last_openai_http_status);
+    } else {
+        std::snprintf(status_buffer, sizeof(status_buffer), "Last OpenAI HTTP: --");
+    }
+    draw_status_line(3, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Heap: %lu KB internal / %lu KB PSRAM free",
+                  static_cast<unsigned long>(state.free_internal_heap_bytes / 1024U),
+                  static_cast<unsigned long>(state.free_psram_bytes / 1024U));
+    draw_status_line(4, status_buffer);
 
     DrawTypographyText(framebuffer,
                        raw_width,
