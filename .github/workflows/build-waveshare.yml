@@ -1,3 +1,4 @@
+# rebuild: reload openai key from nvs + precise transcription errors
 # rebuild: move openai transcription worker to psram
 # rebuild: pocket clanker openai transcription + portal key
 # rebuild: pocket clanker direct transcription
