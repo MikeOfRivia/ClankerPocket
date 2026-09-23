@@ -29,7 +29,9 @@ ActivateResult HandlePrimaryActivate(const SettingsPageCoordinator& coordinator)
         return {
             .intent = ActivateIntent::kToggleAccessPoint,
             .handled = true,
-            .play_activate_cue = true,
+            // Do not fire the audio click at the same instant the Wi-Fi radio changes modes.
+            // On this board that power spike can coincide with the e-paper/UI update.
+            .play_activate_cue = false,
         };
     }
     if (coordinator.IsRoleFocused(
