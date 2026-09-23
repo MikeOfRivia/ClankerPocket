@@ -28,8 +28,10 @@
 #include "epaper_panel.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "project_assets.h"
@@ -1179,14 +1181,15 @@ esp_err_t StartDisplayTask()
         return ESP_OK;
     }
 
-    const BaseType_t created = xTaskCreatePinnedToCore(
+    const BaseType_t created = xTaskCreatePinnedToCoreWithCaps(
         DisplayTask,
         "display_service",
         kDisplayTaskStackWords,
         nullptr,
         followup_task_config::kPriorityDisplay,
         &s_display_task,
-        followup_task_config::kAppCore);
+        followup_task_config::kAppCore,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (created != pdPASS) {
         s_display_task = nullptr;
         return ESP_ERR_NO_MEM;
