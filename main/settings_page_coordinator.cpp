@@ -62,7 +62,10 @@ bool SettingsPageCoordinator::IsRoleFocused(page_navigation::NavigationItemRole 
 
 epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
     const wifi_service::UiState& wifi_state,
-    const storage_service::Snapshot& storage_snapshot) const
+    const storage_service::Snapshot& storage_snapshot,
+    const transcription_service::Snapshot& transcription_snapshot,
+    uint32_t free_internal_heap_bytes,
+    uint32_t free_psram_bytes) const
 {
     storage_service::StorageStats storage_stats = {};
     const bool allow_live_storage_stats =
@@ -86,6 +89,15 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
             wifi_state.access_point_mode,
             IsRoleFocused(page_navigation::NavigationItemRole::kSettingsEnableApToggle)),
     };
+
+    state.wifi_connected = wifi_state.connected;
+    state.openai_key_configured = transcription_service::HasOpenAiApiKey();
+    state.transcription_ready =
+        transcription_snapshot.initialized && transcription_snapshot.provider_ready;
+    state.transcription_in_flight = transcription_snapshot.request_in_flight;
+    state.last_openai_http_status = transcription_snapshot.last_http_status;
+    state.free_internal_heap_bytes = free_internal_heap_bytes;
+    state.free_psram_bytes = free_psram_bytes;
 
     state.storage_status.has_sd_card =
         storage_snapshot.inserted && storage_snapshot.mounted && has_storage_stats;
