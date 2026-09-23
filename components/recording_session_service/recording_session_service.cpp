@@ -79,75 +79,24 @@ uint32_t ResolveClipDurationMs(const recording_service::RecordedClip& clip, uint
 
 GuardrailResult ValidateClip(const recording_service::RecordedClip& clip, uint32_t duration_ms)
 {
+    (void)duration_ms;
+
+    // Pocket Clanker debug mode: bypass the duration and speech-level guardrails so every
+    // non-empty capture reaches the OpenAI transcription service. This is temporary while
+    // proving the end-to-end pipeline; once transcription is stable we can reintroduce sane
+    // thresholds with real hardware measurements.
     if (clip.empty()) {
         return {
             .accepted = false,
             .error_code = "empty_audio",
-            .status_message = "Recording too short",
-        };
-    }
-
-    const uint32_t resolved_duration_ms = ResolveClipDurationMs(clip, duration_ms);
-    if (resolved_duration_ms < kMinTranscriptionDurationMs) {
-        return {
-            .accepted = false,
-            .error_code = "recording_too_short",
-            .status_message = "Recording too short",
-        };
-    }
-
-    size_t speech_windows = 0;
-    size_t window_fill = 0;
-    int32_t window_peak = 0;
-    auto finish_window = [&]() -> bool {
-        if (window_fill == 0) {
-            return false;
-        }
-        if (window_peak >= kSpeechPeakThreshold) {
-            ++speech_windows;
-            if (speech_windows >= kMinSpeechWindows) {
-                return true;
-            }
-        }
-        window_fill = 0;
-        window_peak = 0;
-        return false;
-    };
-
-    bool accepted = false;
-    clip.ForEachChunk([&](const int16_t* chunk_data, size_t chunk_size) {
-        if (accepted || chunk_data == nullptr) {
-            return;
-        }
-        for (size_t index = 0; index < chunk_size; ++index) {
-            int32_t amplitude = chunk_data[index];
-            if (amplitude < 0) {
-                amplitude = -amplitude;
-            }
-            window_peak = std::max(window_peak, amplitude);
-            ++window_fill;
-            if (window_fill >= kSignalWindowSamples && finish_window()) {
-                accepted = true;
-                break;
-            }
-        }
-    });
-    if (!accepted && finish_window()) {
-        accepted = true;
-    }
-
-    if (accepted) {
-        return {
-            .accepted = true,
-            .error_code = "",
-            .status_message = "",
+            .status_message = "Recording empty",
         };
     }
 
     return {
-        .accepted = false,
-        .error_code = "recording_too_quiet",
-        .status_message = "No speech detected",
+        .accepted = true,
+        .error_code = "",
+        .status_message = "",
     };
 }
 
