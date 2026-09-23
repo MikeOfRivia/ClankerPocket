@@ -1,3 +1,4 @@
+# rebuild: stable AP-only setup mode
 # rebuild: prevent AP DHCP repair from rebooting device
 # rebuild: repair AP DHCP/network bring-up
 # rebuild: add Pocket Clanker on-device status diagnostics
