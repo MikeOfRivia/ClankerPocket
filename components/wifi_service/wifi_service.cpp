@@ -736,6 +736,12 @@ esp_err_t SendEmbeddedAsset(httpd_req_t* request, const uint8_t* start, const ui
             return err;
         }
         cursor += chunk_size;
+
+        // Let lwIP/Wi-Fi drain the TCP send buffers between chunks. Without
+        // yielding, the handler can fill the socket faster than the AP stack
+        // can transmit it; send() then returns EAGAIN (errno 11) and the
+        // browser receives a truncated asset.
+        vTaskDelay(1);
     }
 
     return httpd_resp_send_chunk(request, nullptr, 0);
