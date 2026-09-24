@@ -100,10 +100,18 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
     state.last_openai_http_status = transcription_snapshot.last_http_status;
     state.transcription_error_code = transcription_snapshot.last_error_code;
     state.transcription_error_message = transcription_snapshot.last_error_message;
-    state.recording_session_phase =
-        recording_session_service::PhaseName(recording_session_snapshot.phase);
-    state.recording_session_status = recording_session_snapshot.last_status_message;
-    state.recording_session_error_code = recording_session_snapshot.last_error_code;
+    if (recording_session_snapshot.has_terminal_result) {
+        state.recording_session_phase =
+            recording_session_service::PhaseName(recording_session_snapshot.last_terminal_phase);
+        state.recording_session_status =
+            recording_session_snapshot.last_terminal_status_message;
+        state.recording_session_error_code =
+            recording_session_snapshot.last_terminal_error_code;
+    } else {
+        state.recording_session_phase = "none";
+        state.recording_session_status = "No completed recording yet";
+        state.recording_session_error_code.clear();
+    }
     state.free_internal_heap_bytes = free_internal_heap_bytes;
     state.free_psram_bytes = free_psram_bytes;
     state.reset_reason = reset_reason;
