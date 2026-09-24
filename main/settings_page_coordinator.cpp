@@ -64,6 +64,7 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
     const wifi_service::UiState& wifi_state,
     const storage_service::Snapshot& storage_snapshot,
     const transcription_service::Snapshot& transcription_snapshot,
+    const recording_session_service::Snapshot& recording_session_snapshot,
     uint32_t free_internal_heap_bytes,
     uint32_t free_psram_bytes,
     epaper_ui::ResetReasonDisplay reset_reason) const
@@ -99,6 +100,10 @@ epaper_ui::SettingsPageState SettingsPageCoordinator::BuildState(
     state.last_openai_http_status = transcription_snapshot.last_http_status;
     state.transcription_error_code = transcription_snapshot.last_error_code;
     state.transcription_error_message = transcription_snapshot.last_error_message;
+    state.recording_session_phase =
+        recording_session_service::PhaseName(recording_session_snapshot.phase);
+    state.recording_session_status = recording_session_snapshot.last_status_message;
+    state.recording_session_error_code = recording_session_snapshot.last_error_code;
     state.free_internal_heap_bytes = free_internal_heap_bytes;
     state.free_psram_bytes = free_psram_bytes;
     state.reset_reason = reset_reason;
