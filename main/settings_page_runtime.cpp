@@ -8,6 +8,7 @@
 #include "esp_system.h"
 #include "page_navigation/navigation_model.h"
 #include "page_navigation/page_focus_projection.h"
+#include "recording_session_service.h"
 #include "settings_page_interactions.h"
 #include "settings_page_coordinator.h"
 #include "storage_service.h"
@@ -137,6 +138,7 @@ epaper_ui::SettingsPageState BuildStateLocked()
         wifi_service::GetUiState(),
         storage_service::GetSnapshot(),
         transcription_service::GetSnapshot(),
+        recording_session_service::GetSnapshot(),
         static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
         static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)),
         CurrentResetReasonDisplay());
