@@ -44,7 +44,8 @@ ButtonContext s_buttons[] = {
 };
 
 constexpr uint32_t kDirectPollMs = 10;
-TaskHandle_t s_direct_button_task = nullptr;
+TaskHandle_t s_action_button_task = nullptr;
+TaskHandle_t s_select_button_task = nullptr;
 std::atomic<bool> s_direct_poll_enabled{true};
 
 struct DirectButtonState {
@@ -57,9 +58,11 @@ struct DirectButtonState {
     int64_t pressed_at_us = 0;
 };
 
-DirectButtonState s_direct_buttons[] = {
-    {"ACTION", ButtonId::kAction, WAVESHARE_BUTTON_ACTION_PIN, kActionLongPressMs},
-    {"SELECT", ButtonId::kFunction, WAVESHARE_BUTTON_FUNCTION_PIN, kFunctionLongPressMs},
+DirectButtonState s_action_button = {
+    "ACTION", ButtonId::kAction, WAVESHARE_BUTTON_ACTION_PIN, kActionLongPressMs
+};
+DirectButtonState s_select_button = {
+    "SELECT", ButtonId::kFunction, WAVESHARE_BUTTON_FUNCTION_PIN, kFunctionLongPressMs
 };
 
 bool s_initialized = false;
@@ -163,8 +166,14 @@ void EmitDirectEvent(const DirectButtonState& button, ButtonEvent event, uint32_
     s_event_handler(info, s_event_handler_context);
 }
 
-void DirectButtonTask(void*)
+void DirectButtonTask(void* arg)
 {
+    auto* button = static_cast<DirectButtonState*>(arg);
+    if (button == nullptr) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
     while (true) {
         if (!s_direct_poll_enabled.load(std::memory_order_relaxed)) {
             vTaskDelay(pdMS_TO_TICKS(kDirectPollMs));
@@ -172,38 +181,32 @@ void DirectButtonTask(void*)
         }
 
         const int64_t now_us = esp_timer_get_time();
-        for (DirectButtonState& button : s_direct_buttons) {
-            const bool down_now = gpio_get_level(button.gpio) == 0;
-            if (down_now && !button.down) {
-                button.down = true;
-                button.long_sent = false;
-                button.pressed_at_us = now_us;
-                EmitDirectEvent(button, ButtonEvent::kPressDown, 0);
-                continue;
-            }
+        const bool down_now = gpio_get_level(button->gpio) == 0;
 
-            if (down_now && button.down && !button.long_sent) {
-                const uint32_t held_ms =
-                    static_cast<uint32_t>((now_us - button.pressed_at_us) / 1000);
-                if (held_ms >= button.long_press_ms) {
-                    button.long_sent = true;
-                    EmitDirectEvent(button, ButtonEvent::kLongPressStart, held_ms);
-                }
-                continue;
+        if (down_now && !button->down) {
+            button->down = true;
+            button->long_sent = false;
+            button->pressed_at_us = now_us;
+            EmitDirectEvent(*button, ButtonEvent::kPressDown, 0);
+        } else if (down_now && button->down && !button->long_sent) {
+            const uint32_t held_ms =
+                static_cast<uint32_t>((now_us - button->pressed_at_us) / 1000);
+            if (held_ms >= button->long_press_ms) {
+                button->long_sent = true;
+                EmitDirectEvent(*button, ButtonEvent::kLongPressStart, held_ms);
             }
-
-            if (!down_now && button.down) {
-                const uint32_t held_ms =
-                    static_cast<uint32_t>((now_us - button.pressed_at_us) / 1000);
-                button.down = false;
-                EmitDirectEvent(button, ButtonEvent::kPressUp, held_ms);
-                if (button.long_sent) {
-                    EmitDirectEvent(button, ButtonEvent::kLongPressUp, held_ms);
-                }
-                button.long_sent = false;
-                button.pressed_at_us = 0;
+        } else if (!down_now && button->down) {
+            const uint32_t held_ms =
+                static_cast<uint32_t>((now_us - button->pressed_at_us) / 1000);
+            button->down = false;
+            EmitDirectEvent(*button, ButtonEvent::kPressUp, held_ms);
+            if (button->long_sent) {
+                EmitDirectEvent(*button, ButtonEvent::kLongPressUp, held_ms);
             }
+            button->long_sent = false;
+            button->pressed_at_us = 0;
         }
+
         vTaskDelay(pdMS_TO_TICKS(kDirectPollMs));
     }
 }
@@ -222,21 +225,40 @@ esp_err_t InitDirectButtons()
         return err;
     }
 
-    if (s_direct_button_task == nullptr) {
+    // Keep BOOT and radial SELECT on separate tasks. The BOOT callback can enter the
+    // recording/transcription pipeline and block for a while; SELECT must remain responsive
+    // even if that pipeline stalls or fails.
+    if (s_action_button_task == nullptr) {
         const BaseType_t created = xTaskCreatePinnedToCore(
             DirectButtonTask,
-            "direct_buttons",
+            "button_boot",
             3072,
-            nullptr,
+            &s_action_button,
             8,
-            &s_direct_button_task,
+            &s_action_button_task,
             1);
         if (created != pdPASS) {
-            s_direct_button_task = nullptr;
+            s_action_button_task = nullptr;
             return ESP_ERR_NO_MEM;
         }
     }
-    ESP_LOGI(kTag, "Pocket Core direct GPIO buttons initialized: BOOT=%d SELECT=%d",
+
+    if (s_select_button_task == nullptr) {
+        const BaseType_t created = xTaskCreatePinnedToCore(
+            DirectButtonTask,
+            "button_select",
+            3072,
+            &s_select_button,
+            8,
+            &s_select_button_task,
+            1);
+        if (created != pdPASS) {
+            s_select_button_task = nullptr;
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    ESP_LOGI(kTag, "Pocket Core direct GPIO buttons initialized independently: BOOT=%d SELECT=%d",
              WAVESHARE_BUTTON_ACTION_PIN, WAVESHARE_BUTTON_FUNCTION_PIN);
     return ESP_OK;
 }
@@ -364,10 +386,10 @@ esp_err_t Resume()
         return err;
     }
 
-    for (DirectButtonState& button : s_direct_buttons) {
-        button.down = false;
-        button.long_sent = false;
-        button.pressed_at_us = 0;
+    for (DirectButtonState* button : {&s_action_button, &s_select_button}) {
+        button->down = false;
+        button->long_sent = false;
+        button->pressed_at_us = 0;
     }
     s_direct_poll_enabled.store(true, std::memory_order_relaxed);
     ESP_LOGI(kTag, "Button polling resumed");
