@@ -1237,8 +1237,27 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
              ButtonIdName(event.button), ButtonEventName(event.event),
              static_cast<unsigned long>(event.pressed_ms));
 
+    // Pocket Core input model:
+    //   UP/DOWN       = navigate
+    //   radial press  = SELECT/OK
+    //   BOOT          = push-to-talk only
+    //   PWR           = lock/power
+    //
+    // Drive SELECT from PRESS_DOWN instead of waiting for iot_button's SINGLE_CLICK
+    // classifier. This keeps UI activation independent from the gesture state machine
+    // used by BOOT recording and avoids a post-recording "navigation works, select dies"
+    // failure mode. The later release/click/long-press events for SELECT are discarded.
+    button_service::ButtonEventInfo effective_event = event;
+    if (event.button == button_service::ButtonId::kFunction) {
+        if (event.event != button_service::ButtonEvent::kPressDown) {
+            return;
+        }
+        effective_event.event = button_service::ButtonEvent::kSingleClick;
+        effective_event.pressed_ms = 0;
+    }
+
     const app_interaction::InputResult overlay_result =
-        input_focus_runtime::HandleButtonEvent(event);
+        input_focus_runtime::HandleButtonEvent(effective_event);
     PlayInteractionFeedback(overlay_result);
     if (overlay_result.select_modal_submitted) {
         if (!notes_page_runtime::HandleItemActionSelection(
@@ -1283,7 +1302,7 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
         return;
     }
 
-    if (device_sleep_runtime::ConsumeWakeOnlyPowerButtonEvent(event)) {
+    if (device_sleep_runtime::ConsumeWakeOnlyPowerButtonEvent(effective_event)) {
         return;
     }
 
@@ -1299,7 +1318,7 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
     const device_sleep_service::Stage stage_before =
         device_sleep_service::GetSnapshot().runtime.stage;
     device_sleep_runtime::NotifyUserActivity();
-    if (event.button == button_service::ButtonId::kAction &&
+    if (effective_event.button == button_service::ButtonId::kAction &&
         stage_before == device_sleep_service::Stage::kDisplaySleeping) {
         device_sleep_runtime::ArmPowerButtonWakeGesture("display-sleep wake");
         return;
@@ -1309,11 +1328,11 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
     // stop/cancel on release) is a global recording control, so it must be
     // evaluated before per-screen page input. Taps (single/double click) fall
     // through the switch's default below and are routed to the page handlers.
-    if (event.button == button_service::ButtonId::kAction) {
+    if (effective_event.button == button_service::ButtonId::kAction) {
         const recording_session_service::Context recording_context =
             BuildRecordingSessionContext();
         bool handled = false;
-        switch (event.event) {
+        switch (effective_event.event) {
             case button_service::ButtonEvent::kPressDown:
                 handled = recording_session_service::HandlePowerPressDown(recording_context);
                 break;
@@ -1326,13 +1345,14 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
             default:
                 break;
         }
-        if (handled) {
-            return;
-        }
+        // BOOT is never a UI select key in Pocket Core, regardless of whether the
+        // recording session accepted the gesture.
+        (void)handled;
+        return;
     }
 
     const page_input_runtime::ButtonResult page_button_result =
-        page_input_runtime::HandleButtonEventForCurrentScreen(event);
+        page_input_runtime::HandleButtonEventForCurrentScreen(effective_event);
     if (page_button_result.handled) {
         PlayInteractionFeedback(page_button_result.interaction_result);
         if (page_button_result.footer_item != footer_runtime::FooterFocusItem::kNone) {
@@ -1347,7 +1367,7 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
         return;
     }
 
-    switch (event.event) {
+    switch (effective_event.event) {
         case button_service::ButtonEvent::kSingleClick:
             // Intentionally inert. UP/DOWN navigation is driven on press-down/
             // repeat via input_focus_runtime, and POWER_OK activation via page
