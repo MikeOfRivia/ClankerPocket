@@ -58,7 +58,7 @@ Layout BuildLayout(int portrait_width, int portrait_height, const SettingsPageSt
     const int pocket_status_first_line_y =
         pocket_status_heading_y + LineHeight(kSectionRole) + kStatusBlockGap;
     const int pocket_status_bottom =
-        pocket_status_first_line_y + (8 * status_line_height) + (7 * kStatusLineGap);
+        pocket_status_first_line_y + (11 * status_line_height) + (10 * kStatusLineGap);
 
     const int storage_heading_y = pocket_status_bottom + kSectionGap;
     SdStatusStyle storage_style = {};
@@ -363,6 +363,33 @@ void DrawSettingsPage(uint8_t* framebuffer,
                   "TX detail: %s",
                   error_message.empty() ? "--" : error_message.c_str());
     draw_status_line(7, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Session phase: %s",
+                  state.recording_session_phase.empty()
+                      ? "--"
+                      : state.recording_session_phase.c_str());
+    draw_status_line(8, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Session error: %s",
+                  state.recording_session_error_code.empty()
+                      ? "--"
+                      : state.recording_session_error_code.c_str());
+    draw_status_line(9, status_buffer);
+
+    std::string session_status = state.recording_session_status;
+    if (session_status.size() > 58) {
+        session_status.resize(58);
+        session_status += "...";
+    }
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Session status: %s",
+                  session_status.empty() ? "--" : session_status.c_str());
+    draw_status_line(10, status_buffer);
 
     DrawTypographyText(framebuffer,
                        raw_width,
