@@ -4,6 +4,11 @@
 
 #include "button_gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <atomic>
 #include "iot_button.h"
 #include "waveshare_board_config.h"
 
@@ -32,10 +37,29 @@ struct ButtonContext {
 };
 
 ButtonContext s_buttons[] = {
-    {"ACTION", ButtonId::kAction, WAVESHARE_BUTTON_ACTION_PIN, kActionLongPressMs, nullptr},
+    // BOOT and radial SELECT use the Pocket Core direct GPIO poller below.
+    // Keep iot_button only for UP/DOWN navigation, where its repeat classifier is useful.
     {"UP", ButtonId::kUp, WAVESHARE_BUTTON_UP_PIN, kNavigationLongPressMs, nullptr},
-    {"SELECT", ButtonId::kFunction, WAVESHARE_BUTTON_FUNCTION_PIN, kFunctionLongPressMs, nullptr},
     {"DOWN", ButtonId::kDown, WAVESHARE_BUTTON_DOWN_PIN, kNavigationLongPressMs, nullptr},
+};
+
+constexpr uint32_t kDirectPollMs = 10;
+TaskHandle_t s_direct_button_task = nullptr;
+std::atomic<bool> s_direct_poll_enabled{true};
+
+struct DirectButtonState {
+    const char* label;
+    ButtonId id;
+    gpio_num_t gpio;
+    uint16_t long_press_ms;
+    bool down = false;
+    bool long_sent = false;
+    int64_t pressed_at_us = 0;
+};
+
+DirectButtonState s_direct_buttons[] = {
+    {"ACTION", ButtonId::kAction, WAVESHARE_BUTTON_ACTION_PIN, kActionLongPressMs},
+    {"SELECT", ButtonId::kFunction, WAVESHARE_BUTTON_FUNCTION_PIN, kFunctionLongPressMs},
 };
 
 bool s_initialized = false;
@@ -122,6 +146,101 @@ void ButtonEventCallback(void* button_handle, void* user_data)
     }
 }
 
+void EmitDirectEvent(const DirectButtonState& button, ButtonEvent event, uint32_t pressed_ms)
+{
+    if (s_event_handler == nullptr) {
+        return;
+    }
+    ButtonEventInfo info = {};
+    info.button = button.id;
+    info.event = event;
+    info.pressed_ms = pressed_ms;
+    ESP_LOGI(kTag, "%s direct event=%d gpio=%d pressed_ms=%lu",
+             button.label,
+             static_cast<int>(event),
+             static_cast<int>(button.gpio),
+             static_cast<unsigned long>(pressed_ms));
+    s_event_handler(info, s_event_handler_context);
+}
+
+void DirectButtonTask(void*)
+{
+    while (true) {
+        if (!s_direct_poll_enabled.load(std::memory_order_relaxed)) {
+            vTaskDelay(pdMS_TO_TICKS(kDirectPollMs));
+            continue;
+        }
+
+        const int64_t now_us = esp_timer_get_time();
+        for (DirectButtonState& button : s_direct_buttons) {
+            const bool down_now = gpio_get_level(button.gpio) == 0;
+            if (down_now && !button.down) {
+                button.down = true;
+                button.long_sent = false;
+                button.pressed_at_us = now_us;
+                EmitDirectEvent(button, ButtonEvent::kPressDown, 0);
+                continue;
+            }
+
+            if (down_now && button.down && !button.long_sent) {
+                const uint32_t held_ms =
+                    static_cast<uint32_t>((now_us - button.pressed_at_us) / 1000);
+                if (held_ms >= button.long_press_ms) {
+                    button.long_sent = true;
+                    EmitDirectEvent(button, ButtonEvent::kLongPressStart, held_ms);
+                }
+                continue;
+            }
+
+            if (!down_now && button.down) {
+                const uint32_t held_ms =
+                    static_cast<uint32_t>((now_us - button.pressed_at_us) / 1000);
+                button.down = false;
+                EmitDirectEvent(button, ButtonEvent::kPressUp, held_ms);
+                if (button.long_sent) {
+                    EmitDirectEvent(button, ButtonEvent::kLongPressUp, held_ms);
+                }
+                button.long_sent = false;
+                button.pressed_at_us = 0;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(kDirectPollMs));
+    }
+}
+
+esp_err_t InitDirectButtons()
+{
+    gpio_config_t cfg = {};
+    cfg.mode = GPIO_MODE_INPUT;
+    cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+    cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    cfg.intr_type = GPIO_INTR_DISABLE;
+    cfg.pin_bit_mask = (1ULL << WAVESHARE_BUTTON_ACTION_PIN) |
+                       (1ULL << WAVESHARE_BUTTON_FUNCTION_PIN);
+    esp_err_t err = gpio_config(&cfg);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (s_direct_button_task == nullptr) {
+        const BaseType_t created = xTaskCreatePinnedToCore(
+            DirectButtonTask,
+            "direct_buttons",
+            3072,
+            nullptr,
+            8,
+            &s_direct_button_task,
+            1);
+        if (created != pdPASS) {
+            s_direct_button_task = nullptr;
+            return ESP_ERR_NO_MEM;
+        }
+    }
+    ESP_LOGI(kTag, "Pocket Core direct GPIO buttons initialized: BOOT=%d SELECT=%d",
+             WAVESHARE_BUTTON_ACTION_PIN, WAVESHARE_BUTTON_FUNCTION_PIN);
+    return ESP_OK;
+}
+
 esp_err_t RegisterEvent(ButtonContext* context, button_event_t event)
 {
     if (context == nullptr || context->handle == nullptr) {
@@ -192,7 +311,7 @@ esp_err_t Init()
         return ESP_OK;
     }
 
-    esp_err_t first_error = ESP_OK;
+    esp_err_t first_error = InitDirectButtons();
     for (ButtonContext& button : s_buttons) {
         esp_err_t err = CreateButton(&button);
         if (first_error == ESP_OK && err != ESP_OK) {
@@ -221,6 +340,7 @@ esp_err_t Suspend()
         return ESP_ERR_INVALID_STATE;
     }
 
+    s_direct_poll_enabled.store(false, std::memory_order_relaxed);
     const esp_err_t err = iot_button_stop();
     if (err != ESP_OK) {
         ESP_LOGW(kTag, "Button polling suspend failed: %s", esp_err_to_name(err));
@@ -244,6 +364,12 @@ esp_err_t Resume()
         return err;
     }
 
+    for (DirectButtonState& button : s_direct_buttons) {
+        button.down = false;
+        button.long_sent = false;
+        button.pressed_at_us = 0;
+    }
+    s_direct_poll_enabled.store(true, std::memory_order_relaxed);
     ESP_LOGI(kTag, "Button polling resumed");
     return ESP_OK;
 }
