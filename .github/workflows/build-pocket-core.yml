@@ -1,3 +1,4 @@
+# rebuild: unmistakable splash probe + direct SELECT bypass
 # rebuild: direct GPIO BOOT/SELECT + visible splash dwell
 # rebuild: direct PTT transcription path
 # rebuild: corrected splash asset
