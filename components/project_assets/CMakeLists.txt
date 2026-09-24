@@ -6,6 +6,8 @@ idf_component_register(
         "generated_epaper_logos.cpp"
         "project_assets.cpp"
     INCLUDE_DIRS "."
+    EMBED_FILES
+        "clanker_pocket_logo.rle"
 )
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
