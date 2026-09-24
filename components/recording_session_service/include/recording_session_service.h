@@ -66,6 +66,15 @@ struct Snapshot {
     std::string last_status_message = {};
     std::string last_error_code = {};
     std::string last_error_message = {};
+
+    // Latched terminal result from the most recent completed/failed session. Unlike the live
+    // fields above, these intentionally survive ResetToIdleLocked() so diagnostics remain
+    // readable after the recording UI has returned to idle.
+    bool has_terminal_result = false;
+    Phase last_terminal_phase = Phase::kIdle;
+    std::string last_terminal_status_message = {};
+    std::string last_terminal_error_code = {};
+    std::string last_terminal_error_message = {};
 };
 
 struct Event {
