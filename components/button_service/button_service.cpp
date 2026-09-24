@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <atomic>
+#include <initializer_list>
 #include "iot_button.h"
 #include "waveshare_board_config.h"
 
