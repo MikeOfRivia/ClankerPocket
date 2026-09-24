@@ -8,8 +8,8 @@
 namespace button_service {
 
 enum class ButtonId {
-    kAction,    // BOOT / GPIO0: recording control, and the light-sleep wake button.
-    kFunction,  // FN / GPIO5: activate, double-click, long-press.
+    kAction,    // BOOT / GPIO0: Pocket Core push-to-talk only.
+    kFunction,  // Radial press / GPIO5: SELECT / OK.
     kUp,
     kDown,
 };
@@ -24,12 +24,11 @@ enum class ButtonEvent {
     kLongPressUp,
 };
 
-// Either of the two non-navigation keys confirms/selects, matching the reference
-// firmware where the BOOT and FN buttons both drive primary activation. Recording
-// stays exclusive to kAction and the lock screen exclusive to kFunction.
+// Pocket Core has one unambiguous UI activation control: the radial press.
+// BOOT is reserved exclusively for push-to-talk.
 inline bool IsPrimaryButton(ButtonId button)
 {
-    return button == ButtonId::kAction || button == ButtonId::kFunction;
+    return button == ButtonId::kFunction;
 }
 
 struct ButtonEventInfo {
