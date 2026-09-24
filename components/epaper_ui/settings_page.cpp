@@ -292,6 +292,35 @@ void DrawSettingsPage(uint8_t* framebuffer,
                   transcription_state);
     draw_status_line(2, status_buffer);
 
+    // Put the latched recording-session result at the top of the diagnostic block so it is
+    // readable on the fixed-height e-paper settings page without scrolling.
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Last session: %s",
+                  state.recording_session_phase.empty()
+                      ? "--"
+                      : state.recording_session_phase.c_str());
+    draw_status_line(3, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Session error: %s",
+                  state.recording_session_error_code.empty()
+                      ? "--"
+                      : state.recording_session_error_code.c_str());
+    draw_status_line(4, status_buffer);
+
+    std::string session_status = state.recording_session_status;
+    if (session_status.size() > 58) {
+        session_status.resize(58);
+        session_status += "...";
+    }
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "Session status: %s",
+                  session_status.empty() ? "--" : session_status.c_str());
+    draw_status_line(5, status_buffer);
+
     if (state.last_openai_http_status > 0) {
         std::snprintf(status_buffer,
                       sizeof(status_buffer),
@@ -300,14 +329,33 @@ void DrawSettingsPage(uint8_t* framebuffer,
     } else {
         std::snprintf(status_buffer, sizeof(status_buffer), "Last OpenAI HTTP: --");
     }
-    draw_status_line(3, status_buffer);
+    draw_status_line(6, status_buffer);
+
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "TX error: %s",
+                  state.transcription_error_code.empty()
+                      ? "--"
+                      : state.transcription_error_code.c_str());
+    draw_status_line(7, status_buffer);
+
+    std::string error_message = state.transcription_error_message;
+    if (error_message.size() > 58) {
+        error_message.resize(58);
+        error_message += "...";
+    }
+    std::snprintf(status_buffer,
+                  sizeof(status_buffer),
+                  "TX detail: %s",
+                  error_message.empty() ? "--" : error_message.c_str());
+    draw_status_line(8, status_buffer);
 
     std::snprintf(status_buffer,
                   sizeof(status_buffer),
                   "Heap: %lu KB internal / %lu KB PSRAM free",
                   static_cast<unsigned long>(state.free_internal_heap_bytes / 1024U),
                   static_cast<unsigned long>(state.free_psram_bytes / 1024U));
-    draw_status_line(4, status_buffer);
+    draw_status_line(9, status_buffer);
 
     const char* reset_reason_text = "Unknown";
     switch (state.reset_reason) {
@@ -343,52 +391,6 @@ void DrawSettingsPage(uint8_t* framebuffer,
             break;
     }
     std::snprintf(status_buffer, sizeof(status_buffer), "Last reset: %s", reset_reason_text);
-    draw_status_line(5, status_buffer);
-
-    std::snprintf(status_buffer,
-                  sizeof(status_buffer),
-                  "TX error: %s",
-                  state.transcription_error_code.empty()
-                      ? "--"
-                      : state.transcription_error_code.c_str());
-    draw_status_line(6, status_buffer);
-
-    std::string error_message = state.transcription_error_message;
-    if (error_message.size() > 58) {
-        error_message.resize(58);
-        error_message += "...";
-    }
-    std::snprintf(status_buffer,
-                  sizeof(status_buffer),
-                  "TX detail: %s",
-                  error_message.empty() ? "--" : error_message.c_str());
-    draw_status_line(7, status_buffer);
-
-    std::snprintf(status_buffer,
-                  sizeof(status_buffer),
-                  "Session phase: %s",
-                  state.recording_session_phase.empty()
-                      ? "--"
-                      : state.recording_session_phase.c_str());
-    draw_status_line(8, status_buffer);
-
-    std::snprintf(status_buffer,
-                  sizeof(status_buffer),
-                  "Session error: %s",
-                  state.recording_session_error_code.empty()
-                      ? "--"
-                      : state.recording_session_error_code.c_str());
-    draw_status_line(9, status_buffer);
-
-    std::string session_status = state.recording_session_status;
-    if (session_status.size() > 58) {
-        session_status.resize(58);
-        session_status += "...";
-    }
-    std::snprintf(status_buffer,
-                  sizeof(status_buffer),
-                  "Session status: %s",
-                  session_status.empty() ? "--" : session_status.c_str());
     draw_status_line(10, status_buffer);
 
     DrawTypographyText(framebuffer,
