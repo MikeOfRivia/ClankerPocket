@@ -489,10 +489,9 @@ bool HandlePowerLongPressStart(const Context& context)
         }
     }
 
-    // Capture starts before the cue, not after it: waiting for the cue to finish would
-    // swallow the first word. The cue overlaps the opening moments of the take.
+    // Pocket Core voice path is deliberately direct: BOOT hold starts capture immediately.
+    // No start cue owns session state and no callback is allowed to delay the transition.
     const esp_err_t err = recording_service::Start(recording_service::StartMode::kFresh);
-    uint32_t cue_token = 0;
     {
         std::lock_guard<std::mutex> lock(s_mutex);
         if (err != ESP_OK) {
@@ -504,18 +503,14 @@ bool HandlePowerLongPressStart(const Context& context)
             return false;
         }
 
-        cue_token = ++s_cue_token;
-        s_snapshot.phase = Phase::kStartCue;
-        s_snapshot.last_status_message = kStartCueStatus;
+        s_snapshot.phase = Phase::kRecording;
+        s_snapshot.last_status_message = kRecordingStatus;
         s_snapshot.last_error_code.clear();
         s_snapshot.last_error_message.clear();
         NotifyLocked();
     }
 
-    SystemSoundService::GetInstance().PlayCue(
-        SoundCue::kSpeaking, [cue_token](SoundCuePlaybackResult result) {
-            HandleStartCueResult(cue_token, result);
-        });
+    ESP_LOGI(kTag, "Pocket Core PTT: capture started");
     return true;
 }
 
@@ -531,20 +526,12 @@ bool HandlePowerPressUp(const Context&)
         phase = s_snapshot.phase;
     }
 
+    // A tap that never crossed the hold threshold never became a recording.
     if (phase == Phase::kArmed) {
         (void)recording_service::Cancel();
         std::lock_guard<std::mutex> lock(s_mutex);
         ResetToIdleLocked();
         NotifyLocked();
-        return true;
-    }
-
-    // Released while the start cue is still playing: capture is already running, but the
-    // cue owns the transition out of kStartCue. Defer the finish rather than dropping it,
-    // otherwise a hold barely longer than the cue would record forever.
-    if (phase == Phase::kStartCue) {
-        std::lock_guard<std::mutex> lock(s_mutex);
-        s_finish_pending_after_start_cue = true;
         return true;
     }
 
@@ -555,10 +542,26 @@ bool HandlePowerPressUp(const Context&)
     {
         std::lock_guard<std::mutex> lock(s_mutex);
         s_snapshot.phase = Phase::kSaving;
-        s_snapshot.last_status_message = "Preparing recording";
+        s_snapshot.last_status_message = "Finishing recording";
+        s_snapshot.last_error_code.clear();
+        s_snapshot.last_error_message.clear();
         NotifyLocked();
     }
-    (void)recording_service::Finish();
+
+    // Finish synchronously. recording_service emits kClipReady from Finish(), and
+    // HandleRecordingEvent immediately hands that RAM clip to OpenAI transcription.
+    const esp_err_t err = recording_service::Finish();
+    if (err != ESP_OK) {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        s_snapshot.phase = Phase::kFailed;
+        s_snapshot.last_status_message = "Recording failed to finish";
+        s_snapshot.last_error_code = "record_finish_failed";
+        s_snapshot.last_error_message = esp_err_to_name(err);
+        NotifyLocked();
+        return false;
+    }
+
+    ESP_LOGI(kTag, "Pocket Core PTT: capture finished; awaiting clip-ready");
     return true;
 }
 
@@ -735,7 +738,7 @@ void HandleRecordingEvent(const recording_service::Event& event)
             }
         } else if (event.state == recording_service::State::kClipReady) {
             if (should_show_tag_selection) {
-                // Pocket Clanker mode: skip replay/tagging and hand the captured clip directly
+                // Pocket Core: skip replay/tagging and hand the captured clip directly
                 // to transcription. The clip stays in RAM only for the lifetime of the request.
                 s_snapshot.phase = Phase::kSaving;
                 s_snapshot.last_status_message = "Preparing transcription";
@@ -820,11 +823,11 @@ void HandleTranscriptionEvent(const transcription_service::Event& event)
         NotifyLocked();
     }
 
-    // Pocket Clanker does not archive every utterance by default. Release the in-memory
+    // Pocket Core does not archive utterances by default. Release the in-memory
     // recording once transcription has completed (successfully or otherwise).
     recording_service::DiscardClip();
     if (completed) {
-        ESP_LOGI(kTag, "Pocket Clanker transcript ready: chars=%u",
+        ESP_LOGI(kTag, "Clanker Pocket transcript ready: chars=%u",
                  static_cast<unsigned>(event.snapshot.last_transcript.size()));
     }
 }
