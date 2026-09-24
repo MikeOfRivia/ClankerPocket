@@ -37,13 +37,15 @@
 #include "project_assets.h"
 #include "waveshare_board_config.h"
 
+extern const uint8_t kClankerPocketLogoStart[] asm("_binary_clanker_pocket_logo_rle_start");
+extern const uint8_t kClankerPocketLogoEnd[] asm("_binary_clanker_pocket_logo_rle_end");
+
 namespace display_service {
 namespace {
 
 constexpr const char* kTag = "DisplayService";
 constexpr int kPortraitWidth = WAVESHARE_EPD_HEIGHT;
 constexpr int kPortraitHeight = WAVESHARE_EPD_WIDTH;
-constexpr int kSplashLogoGap = design::spacing::k16;
 constexpr uint32_t kDisplayTaskStackWords = 4096;
 
 enum class DisplayCommandType {
@@ -255,29 +257,68 @@ void DrawPortraitMonoAsset(uint8_t* framebuffer, int x, int y, const EmbeddedIma
     }
 }
 
+uint16_t ReadLe16(const uint8_t* p)
+{
+    return static_cast<uint16_t>(p[0]) |
+           static_cast<uint16_t>(static_cast<uint16_t>(p[1]) << 8);
+}
+
+uint32_t ReadLe32(const uint8_t* p)
+{
+    return static_cast<uint32_t>(p[0]) |
+           (static_cast<uint32_t>(p[1]) << 8) |
+           (static_cast<uint32_t>(p[2]) << 16) |
+           (static_cast<uint32_t>(p[3]) << 24);
+}
+
+void DrawPortraitHorizontalRun(uint8_t* framebuffer, int x, int y, int length)
+{
+    for (int col = 0; col < length; ++col) {
+        DrawPortraitPixel(framebuffer, x + col, y, true);
+    }
+}
+
 void DrawSplashScreen(uint8_t* framebuffer)
 {
-    const EmbeddedImageAsset* followup_logo =
-        project_assets::GetLogo(EmbeddedLogoId::kFollowupLogo);
-    const EmbeddedImageAsset* alxv_logo =
-        project_assets::GetLogo(EmbeddedLogoId::kAlxvLabsLogo);
-    if (framebuffer == nullptr || followup_logo == nullptr || alxv_logo == nullptr) {
+    // CPR1 = Clanker Pocket RLE v1. This asset is generated directly from Mike's
+    // supplied monochrome logo so the device splash uses the actual mark rather
+    // than recreating it with substitute fonts.
+    const uint8_t* data = kClankerPocketLogoStart;
+    const size_t data_len =
+        static_cast<size_t>(kClankerPocketLogoEnd - kClankerPocketLogoStart);
+    if (framebuffer == nullptr || data_len < 12 ||
+        std::memcmp(data, "CPR1", 4) != 0) {
+        ESP_LOGW(kTag, "Clanker Pocket splash asset missing or invalid");
         return;
     }
 
-    const int content_width = std::max<int>(followup_logo->width, alxv_logo->width);
-    const int content_height = static_cast<int>(followup_logo->height) + kSplashLogoGap +
-                               static_cast<int>(alxv_logo->height);
-    const int content_x = (kPortraitWidth - content_width) / 2;
-    const int content_y = (kPortraitHeight - content_height) / 2;
+    const uint16_t logo_width = ReadLe16(data + 4);
+    const uint16_t logo_height = ReadLe16(data + 6);
+    const uint32_t run_count = ReadLe32(data + 8);
+    constexpr size_t kHeaderBytes = 12;
+    constexpr size_t kRunBytes = 6;
+    const size_t required = kHeaderBytes + static_cast<size_t>(run_count) * kRunBytes;
+    if (logo_width == 0 || logo_height == 0 ||
+        logo_width > kPortraitWidth || logo_height > kPortraitHeight ||
+        required > data_len) {
+        ESP_LOGW(kTag, "Clanker Pocket splash dimensions/data invalid");
+        return;
+    }
 
-    const int followup_x = content_x + (content_width - followup_logo->width) / 2;
-    const int followup_y = content_y;
-    DrawPortraitMonoAsset(framebuffer, followup_x, followup_y, followup_logo);
+    const int origin_x = (kPortraitWidth - static_cast<int>(logo_width)) / 2;
+    const int origin_y = (kPortraitHeight - static_cast<int>(logo_height)) / 2;
+    const uint8_t* run = data + kHeaderBytes;
 
-    const int alxv_x = content_x + (content_width - alxv_logo->width) / 2;
-    const int alxv_y = followup_y + followup_logo->height + kSplashLogoGap;
-    DrawPortraitMonoAsset(framebuffer, alxv_x, alxv_y, alxv_logo);
+    for (uint32_t i = 0; i < run_count; ++i, run += kRunBytes) {
+        const uint16_t y = ReadLe16(run);
+        const uint16_t x = ReadLe16(run + 2);
+        const uint16_t length = ReadLe16(run + 4);
+        if (y >= logo_height || x >= logo_width ||
+            static_cast<uint32_t>(x) + length > logo_width) {
+            continue;
+        }
+        DrawPortraitHorizontalRun(framebuffer, origin_x + x, origin_y + y, length);
+    }
 }
 
 void DrawCurrentOverlays(uint8_t* framebuffer, const RenderSnapshot& snapshot)
