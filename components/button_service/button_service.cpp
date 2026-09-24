@@ -34,7 +34,7 @@ struct ButtonContext {
 ButtonContext s_buttons[] = {
     {"ACTION", ButtonId::kAction, WAVESHARE_BUTTON_ACTION_PIN, kActionLongPressMs, nullptr},
     {"UP", ButtonId::kUp, WAVESHARE_BUTTON_UP_PIN, kNavigationLongPressMs, nullptr},
-    {"FN", ButtonId::kFunction, WAVESHARE_BUTTON_FUNCTION_PIN, kFunctionLongPressMs, nullptr},
+    {"SELECT", ButtonId::kFunction, WAVESHARE_BUTTON_FUNCTION_PIN, kFunctionLongPressMs, nullptr},
     {"DOWN", ButtonId::kDown, WAVESHARE_BUTTON_DOWN_PIN, kNavigationLongPressMs, nullptr},
 };
 
