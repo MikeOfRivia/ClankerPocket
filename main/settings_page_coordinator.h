@@ -4,6 +4,7 @@
 #include "epaper_ui/settings_page.h"
 #include "page_navigation/navigation_model.h"
 #include "page_navigation/roving_focus.h"
+#include "recording_session_service.h"
 #include "storage_service.h"
 #include "transcription_service.h"
 #include "wifi_service.h"
@@ -21,6 +22,7 @@ public:
         const wifi_service::UiState& wifi_state,
         const storage_service::Snapshot& storage_snapshot,
         const transcription_service::Snapshot& transcription_snapshot,
+        const recording_session_service::Snapshot& recording_session_snapshot,
         uint32_t free_internal_heap_bytes,
         uint32_t free_psram_bytes,
         epaper_ui::ResetReasonDisplay reset_reason) const;
