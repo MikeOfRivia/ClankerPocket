@@ -933,11 +933,16 @@ void HandleRecordingSessionEvent(const recording_session_service::Event& event, 
             break;
         }
         case recording_session_service::Phase::kFailed: {
-            const char* text = event.snapshot.last_status_message.empty()
+            std::string text = event.snapshot.last_status_message.empty()
                                    ? "Recording failed"
-                                   : event.snapshot.last_status_message.c_str();
+                                   : event.snapshot.last_status_message;
+            if (!event.snapshot.last_error_code.empty()) {
+                text += " [";
+                text += event.snapshot.last_error_code;
+                text += "]";
+            }
             const esp_err_t err = overlay_runtime::ShowToastForDuration(
-                BuildToast(text, EmbeddedIconId::kClose), 2500);
+                BuildToast(text.c_str(), EmbeddedIconId::kClose), 10000);
             FlushOverlayFeedback();
             if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
                 ESP_LOGW(kTag, "Show recording failure toast failed: %s",
@@ -1341,6 +1346,11 @@ void HandleDispatchedButtonEvent(const button_service::ButtonEventInfo& event)
                 break;
             case button_service::ButtonEvent::kPressUp:
                 handled = recording_session_service::HandlePowerPressUp(recording_context);
+                // Diagnostic bring-up: after every BOOT release, take us straight to
+                // Settings so recording/transcription state is visible without relying on
+                // radial SELECT. This breaks the reboot->retry->can't-open-stats loop.
+                (void)SyncSettingsPageState(false);
+                (void)ShowSettingsScreen(display_service::RefreshMode::kFull);
                 break;
             default:
                 break;
