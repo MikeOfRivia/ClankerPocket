@@ -1,3 +1,4 @@
+# rebuild: Clanker Pocket rebrand
 # rebuild: deterministic radial select
 # rebuild: pocket core runtime trim 1
 # rebuild: visible latched session diagnostics
@@ -11,7 +12,7 @@
 # rebuild: stable AP-only setup mode
 # rebuild: prevent AP DHCP repair from rebooting device
 # rebuild: repair AP DHCP/network bring-up
-# rebuild: add Pocket Clanker on-device status diagnostics
+# rebuild: add Clanker Pocket on-device status diagnostics
 # rebuild: preserve nvs with app-only update image + skip onboarding
 # rebuild: reload openai key from nvs + precise transcription errors
 # rebuild: move openai transcription worker to psram
@@ -51,35 +52,35 @@ jobs:
             -v "${GITHUB_WORKSPACE}:/app" \
             -w /app \
             espressif/idf:v5.5.4 \
-            /bin/bash -lc '. /opt/esp/idf/export.sh && cd build && python -m esptool --chip esp32s3 merge_bin -o folloup-waveshare-full.bin --flash_mode qio --flash_freq 80m --flash_size 16MB $(cat flash_args)'
+            /bin/bash -lc '. /opt/esp/idf/export.sh && cd build && python -m esptool --chip esp32s3 merge_bin -o clanker-pocket-full.bin --flash_mode qio --flash_freq 80m --flash_size 16MB $(cat flash_args)'
 
       - name: Package firmware
         shell: bash
         run: |
           mkdir -p firmware-package
-          cp build/folloup-waveshare-full.bin firmware-package/
+          cp build/clanker-pocket-full.bin firmware-package/
           cp build/flash_args firmware-package/
           cp build/flasher_args.json firmware-package/
           cp build/bootloader/bootloader.bin firmware-package/
           cp build/partition_table/partition-table.bin firmware-package/
           find build -maxdepth 1 -name '*.bin' -exec cp {} firmware-package/ \;
 
-          # Normal Pocket Clanker development flash: app partition only.
+          # Normal Clanker Pocket development flash: app partition only.
           # Flashing this at 0x20000 preserves NVS (Wi-Fi, OpenAI key, timezone, etc.).
-          cp build/folloup_sticky.bin firmware-package/pocket-clanker-update.bin
+          cp build/clanker_pocket.bin firmware-package/clanker-pocket-update.bin
 
           cat > firmware-package/FLASH-UPDATE.txt <<'EOF'
-          Pocket Clanker update flash (preserves NVS/settings):
-          py -m esptool --chip esp32s3 --port COM4 write-flash 0x20000 .\pocket-clanker-update.bin
+          Clanker Pocket update flash (preserves NVS/settings):
+          py -m esptool --chip esp32s3 --port COM4 write-flash 0x20000 .\clanker-pocket-update.bin
 
           Factory/full flash (ERASES NVS/settings because the merged image spans 0x0 onward):
-          py -m esptool --chip esp32s3 --port COM4 write-flash 0x0 .\folloup-waveshare-full.bin
+          py -m esptool --chip esp32s3 --port COM4 write-flash 0x0 .\clanker-pocket-full.bin
           EOF
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: folloup-waveshare-baseline
+          name: clanker-pocket-core
           path: firmware-package/
           if-no-files-found: error
 
