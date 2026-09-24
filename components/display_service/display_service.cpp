@@ -1293,6 +1293,10 @@ esp_err_t Init()
         ESP_RETURN_ON_ERROR(ApplyStartupSplash(),
                             kTag,
                             "panel startup splash refresh failed");
+        // E-paper startup immediately transitions into the home screen. Hold the branded
+        // frame long enough to be visibly testable instead of overwriting it as soon as
+        // the full refresh completes.
+        vTaskDelay(pdMS_TO_TICKS(1800));
     }
     ESP_RETURN_ON_ERROR(StartDisplayTask(), kTag, "display task init failed");
 
