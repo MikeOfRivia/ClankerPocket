@@ -1,3 +1,4 @@
+# rebuild: auto-open diagnostics after recording attempt
 # rebuild: compile fix for isolated SELECT task
 # rebuild: isolate SELECT from recording callback stalls
 # rebuild: unmistakable splash probe + direct SELECT bypass
