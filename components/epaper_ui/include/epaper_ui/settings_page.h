@@ -49,6 +49,9 @@ struct SettingsPageState {
     int last_openai_http_status = 0;
     std::string transcription_error_code = {};
     std::string transcription_error_message = {};
+    std::string recording_session_phase = {};
+    std::string recording_session_status = {};
+    std::string recording_session_error_code = {};
     uint32_t free_internal_heap_bytes = 0;
     uint32_t free_psram_bytes = 0;
     ResetReasonDisplay reset_reason = ResetReasonDisplay::kUnknown;
