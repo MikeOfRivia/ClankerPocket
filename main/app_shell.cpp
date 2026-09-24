@@ -1441,6 +1441,13 @@ void HandlePowerKeyPress(power_key_runtime::Press press, void*)
 
 void HandleButtonEvent(const button_service::ButtonEventInfo& event, void*)
 {
+    // Radial SELECT is the escape hatch for the whole UI. Do not let any recording
+    // callback/dispatcher backlog strand it after a voice attempt.
+    if (event.button == button_service::ButtonId::kFunction) {
+        HandleDispatchedButtonEvent(event);
+        return;
+    }
+
     button_input_runtime::HandleHardwareEvent(
         event,
         [](const button_service::ButtonEventInfo& dispatched_event) {
