@@ -211,13 +211,8 @@ esp_err_t ShowHomeScreen(display_service::RefreshMode refresh_mode)
         ESP_LOGW(kTag, "Dashboard sync before home screen failed: %s",
                  esp_err_to_name(dashboard_err));
     }
-    // Reconcile the archive counts against the SD card once, off the boot path: the dashboard
-    // rendered from the NVS-cached snapshot above; this background scan repaints only if the
-    // counts actually changed (e.g. first boot, or the card was edited externally).
-    static std::atomic<bool> s_archive_reconcile_started{false};
-    if (!s_archive_reconcile_started.exchange(true)) {
-        recording_archive_service::RefreshAsync();
-    }
+    // Pocket Core deliberately skips the archive reconciliation scan. Voice capture is
+    // transient while the transcription path is under test.
     return display_service::SetCurrentScreen(display_service::ScreenId::kHome, refresh_mode,
                                              "show_home_screen");
 }
@@ -1153,8 +1148,8 @@ void HandleTimezoneEvent(const timezone_service::Event& event, void*)
 
 void RegisterWifiBackendRoutes(httpd_handle_t server, void*)
 {
+    // Pocket Core exposes only the setup we need while proving the voice pipeline.
     timezone_service::RegisterPortalRoutes(server);
-    gemini_service::RegisterPortalRoutes(server);
     transcription_service::RegisterPortalRoutes(server);
 }
 
@@ -1207,8 +1202,8 @@ void HandleWifiEvent(const wifi_service::Event& event, void*)
              event.ui_state.ap_url.empty() ? "<none>" : event.ui_state.ap_url.c_str(),
              event.ui_state.rssi);
     timezone_service::SetNetworkConnected(event.ui_state.connected);
-    gemini_service::SetNetworkState(event.ui_state.connected,
-                                    event.ui_state.access_point_mode);
+    // Gemini is intentionally dormant in Pocket Core. OpenAI transcription owns the only
+    // cloud request path during voice-pipeline bring-up.
 
     // Do not drive the e-paper panel while the setup AP radio is being brought up.
     // The Wi-Fi service already documents this board's sensitivity to overlapping RF activity
@@ -1748,11 +1743,11 @@ void Run()
         .button_handler_context = nullptr,
     });
     PlayFeedback(feedback_service::FeedbackEvent::kStartup);
-    InitImuService();
-    InitDeviceSleepRuntime();
+
+    // Pocket Core bring-up: keep the hardware/UI/network/audio path, but do not start FolloUp
+    // background services that are unrelated to voice -> transcription. Their source remains
+    // available on the reference branch while we prove the minimal appliance.
     InitTimezoneService();
-    InitRecordingArchiveService();
-    InitGeminiService();
     InitWifiService();
     InitRecordingService();
     InitTranscriptionService();
