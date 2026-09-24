@@ -179,6 +179,16 @@ void SyncRecordingStateLocked(const recording_service::UiState& state)
 
 void NotifyLocked()
 {
+    // Preserve the last terminal result even if the live session is reset to idle immediately
+    // afterward. This is diagnostic state only and is replaced by the next complete/failed take.
+    if (s_snapshot.phase == Phase::kComplete || s_snapshot.phase == Phase::kFailed) {
+        s_snapshot.has_terminal_result = true;
+        s_snapshot.last_terminal_phase = s_snapshot.phase;
+        s_snapshot.last_terminal_status_message = s_snapshot.last_status_message;
+        s_snapshot.last_terminal_error_code = s_snapshot.last_error_code;
+        s_snapshot.last_terminal_error_message = s_snapshot.last_error_message;
+    }
+
     EventHandler handler = s_event_handler;
     void* context = s_event_context;
     if (handler == nullptr) {
