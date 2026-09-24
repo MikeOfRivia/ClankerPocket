@@ -854,6 +854,11 @@ void HandleTranscriptionEvent(const transcription_service::Event& event, void*)
                  : event.snapshot.last_error_code.c_str(),
              static_cast<unsigned>(event.snapshot.last_transcript.size()));
     recording_session_service::HandleTranscriptionEvent(event);
+
+    // Settings is our live bring-up console. Keep it refreshed while the OpenAI
+    // request transitions so the user does not get stranded on the initial
+    // "Transcribing" snapshot after BOOT release.
+    (void)SyncSettingsPageState(true);
 }
 
 void HandleRecordingSessionEvent(const recording_session_service::Event& event, void*)
