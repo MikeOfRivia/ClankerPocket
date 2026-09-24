@@ -280,9 +280,27 @@ void DrawPortraitHorizontalRun(uint8_t* framebuffer, int x, int y, int length)
 
 void DrawSplashScreen(uint8_t* framebuffer)
 {
-    // CPR1 = Clanker Pocket RLE v1. This asset is generated directly from Mike's
-    // supplied monochrome logo so the device splash uses the actual mark rather
-    // than recreating it with substitute fonts.
+    if (framebuffer == nullptr) {
+        return;
+    }
+
+    // Deliberately obvious boot probe. If this frame does not appear, the problem is
+    // not the logo asset -- the startup splash path itself is not reaching the panel.
+    constexpr int kFrame = 12;
+    for (int y = 0; y < kFrame; ++y) {
+        DrawPortraitHorizontalRun(framebuffer, 0, y, kPortraitWidth);
+        DrawPortraitHorizontalRun(framebuffer, 0, kPortraitHeight - 1 - y, kPortraitWidth);
+    }
+    for (int y = kFrame; y < kPortraitHeight - kFrame; ++y) {
+        DrawPortraitHorizontalRun(framebuffer, 0, y, kFrame);
+        DrawPortraitHorizontalRun(framebuffer, kPortraitWidth - kFrame, y, kFrame);
+    }
+    for (int i = 0; i < 90; ++i) {
+        DrawPortraitHorizontalRun(framebuffer, 20 + i, 20 + i, 6);
+        DrawPortraitHorizontalRun(framebuffer, kPortraitWidth - 26 - i, 20 + i, 6);
+    }
+
+    // CPR1 = Clanker Pocket RLE v1.
     const uint8_t* data = kClankerPocketLogoStart;
     const size_t data_len =
         static_cast<size_t>(kClankerPocketLogoEnd - kClankerPocketLogoStart);
