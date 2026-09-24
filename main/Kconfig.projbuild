@@ -1,8 +1,8 @@
-menu "Folloup Settings"
+menu "Clanker Pocket Settings"
 
     config FOLLOWUP_WIFI_AP_PREFIX
         string "Wi-Fi AP prefix"
-        default "Followup"
+        default "ClankerPocket"
         help
             Prefix used when the device enters Wi-Fi access-point setup mode.
             The full AP SSID appends the last three Wi-Fi MAC bytes.
