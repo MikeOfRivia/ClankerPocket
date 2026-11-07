@@ -53,8 +53,58 @@ static void moveText(mcumax_move m,bool ai){
  snprintf(lastText,sizeof(lastText),"%s: %s to %s",ai?"Computer":"Player",a,b);
 }
 
+
+// Detect whether the side to move is in check. mcu-max exposes legal moves,
+// but not an explicit in-check query. Board uses 0x88 indexing (rank*16+file).
+static bool boardSquare(int s){return s>=0&&s<128&&!(s&0x88);}
+static bool enemyPiece(int s,bool enemyBlack,int kind){
+ if(!boardSquare(s))return false;
+ const mcumax_piece p=mcumax_get_piece((uint8_t)s);
+ return (p&7)==kind&&!!(p&MCUMAX_BLACK)==enemyBlack;
+}
+static int checkedKingSquare(){
+ const bool usBlack=(mcumax_get_current_side()==0x10);
+ int king=-1;
+ for(int r=0;r<8&&king<0;r++)for(int f=0;f<8;f++){
+  int s=r*16+f;
+  const mcumax_piece p=mcumax_get_piece((uint8_t)s);
+  if((p&7)==MCUMAX_KING&&!!(p&MCUMAX_BLACK)==usBlack){king=s;break;}
+ }
+ if(king<0)return -1;
+ const bool enemyBlack=!usBlack;
+ const int pawnRankOffset=enemyBlack?-16:16;
+ for(int df=-1;df<=1;df+=2){
+  int attacker=king+pawnRankOffset+df;
+  if(enemyPiece(attacker,enemyBlack,enemyBlack?MCUMAX_PAWN_DOWNSTREAM:MCUMAX_PAWN_UPSTREAM))return king;
+ }
+ static const int knights[]={-33,-31,-18,-14,14,18,31,33};
+ for(int d:knights)if(enemyPiece(king+d,enemyBlack,MCUMAX_KNIGHT))return king;
+ static const int kingSteps[]={-17,-16,-15,-1,1,15,16,17};
+ for(int d:kingSteps)if(enemyPiece(king+d,enemyBlack,MCUMAX_KING))return king;
+ static const int diagonal[]={-17,-15,15,17};
+ static const int straight[]={-16,-1,1,16};
+ for(int d:diagonal){
+  for(int q=king+d;boardSquare(q);q+=d){
+   mcumax_piece p=mcumax_get_piece((uint8_t)q);
+   if(!(p&7))continue;
+   if(!!(p&MCUMAX_BLACK)==enemyBlack&&((p&7)==MCUMAX_BISHOP||(p&7)==MCUMAX_QUEEN))return king;
+   break;
+  }
+ }
+ for(int d:straight){
+  for(int q=king+d;boardSquare(q);q+=d){
+   mcumax_piece p=mcumax_get_piece((uint8_t)q);
+   if(!(p&7))continue;
+   if(!!(p&MCUMAX_BLACK)==enemyBlack&&((p&7)==MCUMAX_ROOK||(p&7)==MCUMAX_QUEEN))return king;
+   break;
+  }
+ }
+ return -1;
+}
+
 static void drawBoard(){
  const bool blackToMove=(mcumax_get_current_side()==0x10);
+ const int checkedKing=checkedKingSquare();
  for(int i=0;i<64;i++){
   uint8_t sq=((i>>3)<<4)|(i&7);
   mcumax_piece p=mcumax_get_piece(sq);
@@ -72,12 +122,15 @@ static void drawBoard(){
   uint32_t bg=dark?0x71926F:0xE9E3C9;
   if(selected==(int)sq)bg=0xE6B448;
   else if(selected>=0&&canMove((uint8_t)selected,sq))bg=0x93B5CD;
+  // Check takes visual priority over selection and move markers.
+  if(sq==checkedKing)bg=0xDC343F;
   if(renderedColor[i]!=bg){
    lv_obj_set_style_bg_color(cells[i],lv_color_hex(bg),0);
    renderedColor[i]=bg;
   }
  }
- lv_label_set_text(statusLabel,gameOver?"No legal moves - Game over":awaitingAI?"Computer thinking...":blackToMove?"Black to move":"White to move");
+ lv_label_set_text(statusLabel,gameOver?(checkedKing>=0?"CHECKMATE!":"STALEMATE"):(checkedKing>=0?(blackToMove?"CHECK! BLACK KING":"CHECK! WHITE KING"):(awaitingAI?"Computer thinking...":blackToMove?"Black to move":"White to move")));
+ lv_obj_set_style_text_color(statusLabel,checkedKing>=0?lv_color_hex(0xFF626B):lv_color_hex(0xC3D6EC),0);
  lv_label_set_text(modeLabel,vsAI?"MODE: VS COMPUTER":"MODE: TWO PLAYERS");
  char lvl[40];snprintf(lvl,sizeof(lvl),"LEVEL: %d / 5",level);
  lv_label_set_text(levelLabel,lvl);
