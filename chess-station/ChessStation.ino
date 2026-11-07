@@ -9,7 +9,8 @@ using namespace esp_panel::drivers;
 using namespace esp_panel::board;
 
 static lv_obj_t *cells[64], *pieces[64], *moveDots[64], *statusLabel, *modeLabel, *levelLabel, *lastLabel, *undoButton;
-static bool inGame=false;
+static bool inGame=false, twoPlayerSetup=false, knightsOnly=false;
+static lv_obj_t *variantLabel=nullptr;
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
@@ -25,6 +26,7 @@ static uint8_t renderedPiece[64];
 static uint32_t renderedColor[64];
 static uint8_t renderedDot[64];
 extern const lv_image_dsc_t chess_piece_images[24];
+extern const lv_image_dsc_t chess_logo;
 // Level 1-3 are deliberately weakened: shallow search alone is still very
 // unforgiving at beginner ratings. No Elo claim without actual calibration.
 // Level 4 retains the strongest search budget from the previous 5-level build.
@@ -197,7 +199,7 @@ static void drawBoard(){
  if(!vsAI)return;
  lv_label_set_text(statusLabel,gameOver?(checkedKing>=0?"CHECKMATE!":"STALEMATE"):(checkedKing>=0?(blackToMove?"CHECK! BLACK KING":"CHECK! WHITE KING"):(awaitingAI?"Computer thinking...":blackToMove?"Black to move":"White to move")));
  lv_obj_set_style_text_color(statusLabel,checkedKing>=0?lv_color_hex(0xFF626B):lv_color_hex(0xC3D6EC),0);
- lv_label_set_text(modeLabel,vsAI?"MODE: VS COMPUTER":"MODE: TWO PLAYERS");
+
  char lvl[48];snprintf(lvl,sizeof(lvl),"LEVEL %d/4: %s",level,levelNames[level-1]);
  lv_label_set_text(levelLabel,lvl);
  lv_label_set_text(lastLabel,lastText);
@@ -233,18 +235,11 @@ static void createGameUI(){
  lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
  lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  if(!vsAI){
-  // Minimal two-player mode: no side panel, no AI or undo controls.
-  // Long pressing the board corner exits to the setup screen.
-  lv_obj_t *exitBtn=newButton(screen,8,8,105,40,"MENU",7);
-  lv_obj_set_style_bg_opa(exitBtn,LV_OPA_70,0);
+  // In portrait 2P these controls sit outside the centered board.
+  newButton(screen,8,8,120,42,"MENU",7);
+  newButton(screen,8,60,120,42,"MODE",10);
  }
- if(vsAI){
- lv_obj_t *title=lv_label_create(screen);
- lv_label_set_text(title,"CHESS STATION");
- lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0);
- lv_obj_set_style_text_color(title,lv_color_hex(0xF4D58C),0);
- lv_obj_set_pos(title,476,17);
- }
+
  // Every mode needs a full set of board objects before drawBoard().
  for(int i=0;i<64;i++){
   int r=i/8,c=i%8;
@@ -292,10 +287,8 @@ static void createGameUI(){
  if(vsAI){
  statusLabel=lv_label_create(screen);
  lv_obj_set_style_text_color(statusLabel,lv_color_hex(0xC3D6EC),0);
- lv_obj_set_pos(statusLabel,476,60);
- modeLabel=lv_label_create(screen);lv_obj_set_pos(modeLabel,476,98);
- lv_obj_set_style_text_color(modeLabel,lv_color_hex(0xFFFFFF),0);
- levelLabel=lv_label_create(screen);lv_obj_set_pos(levelLabel,476,140);
+ lv_obj_set_pos(statusLabel,476,45);
+ levelLabel=lv_label_create(screen);lv_obj_set_pos(levelLabel,476,105);
  lv_obj_set_style_text_color(levelLabel,lv_color_hex(0xFFFFFF),0);
  newButton(screen,476,180,145,46,"NEW GAME",1);
  undoButton=newButton(screen,633,180,145,46,"UNDO",2);
@@ -306,47 +299,55 @@ static void createGameUI(){
  lv_label_set_long_mode(lastLabel,LV_LABEL_LONG_WRAP);
  lv_obj_set_style_text_color(lastLabel,lv_color_hex(0xF4D58C),0);
  lv_obj_set_pos(lastLabel,476,364);
- lv_obj_t *foot=lv_label_create(screen);
- lv_label_set_text(foot,"mcu-max  |  Waveshare ESP32-S3");
- lv_obj_set_style_text_color(foot,lv_color_hex(0x8EA0B6),0);
- lv_obj_set_pos(foot,476,443);
  }
  drawBoard();
 }
 
 static void createHome(){
- inGame=false;
+ inGame=false;twoPlayerSetup=false;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
- cells[0]=nullptr;
- statusLabel=modeLabel=lastLabel=undoButton=nullptr;
+ statusLabel=modeLabel=levelLabel=lastLabel=undoButton=variantLabel=nullptr;
  lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
  lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
- lv_obj_t *title=lv_label_create(screen);
- lv_label_set_text(title,"CHESS STATION");
- lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
- lv_obj_set_style_text_color(title,lv_color_hex(0xF4D58C),0);
- lv_obj_align(title,LV_ALIGN_TOP_MID,0,40);
- lv_obj_t *intro=lv_label_create(screen);
- lv_label_set_text(intro,"Choose your game");
- lv_obj_set_style_text_color(intro,lv_color_hex(0xC3D6EC),0);
- lv_obj_align(intro,LV_ALIGN_TOP_MID,0,96);
- newButton(screen,175,145,210,64,"1 PLAYER",5);
- newButton(screen,415,145,210,64,"2 PLAYERS",6);
- levelLabel=lv_label_create(screen);
- lv_obj_set_style_text_color(levelLabel,lv_color_hex(0xFFFFFF),0);
- lv_obj_align(levelLabel,LV_ALIGN_TOP_MID,0,245);
- newButton(screen,280,280,240,52,"CHANGE DIFFICULTY",4);
+ lv_obj_t *brand=lv_image_create(screen);
+ lv_image_set_src(brand,&chess_logo);
+ lv_obj_set_style_image_recolor_opa(brand,LV_OPA_TRANSP,0);
+ lv_obj_align(brand,LV_ALIGN_TOP_MID,0,0);
+ lv_obj_remove_flag(brand,LV_OBJ_FLAG_CLICKABLE);
+ newButton(screen,275,260,250,65,"1 PLAYER",5);
+ newButton(screen,275,345,250,65,"2 PLAYERS",6);
+}
+static void createTwoPlayerSetup(){
+ inGame=false;twoPlayerSetup=true;
+ lv_obj_clean(lv_screen_active());
+ screen=lv_screen_active();
+ statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
+ lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_t *heading=lv_label_create(screen);
+ lv_label_set_text(heading,"2 PLAYERS");
+ lv_obj_set_style_text_font(heading,&lv_font_montserrat_28,0);
+ lv_obj_set_style_text_color(heading,lv_color_hex(0xF4D58C),0);
+ lv_obj_align(heading,LV_ALIGN_TOP_MID,0,40);
+ variantLabel=lv_label_create(screen);
+ lv_obj_set_style_text_color(variantLabel,lv_color_hex(0xFFFFFF),0);
+ lv_obj_align(variantLabel,LV_ALIGN_TOP_MID,0,120);
+ lv_label_set_text(variantLabel,knightsOnly?"MODE: KNIGHTS ONLY":"MODE: STANDARD");
+ newButton(screen,270,165,260,55,"CHANGE MODE",8);
+ newButton(screen,270,239,260,60,"START GAME",9);
+ newButton(screen,270,317,260,52,"RETURN TO MENU",7);
  lv_obj_t *tip=lv_label_create(screen);
- lv_label_set_text(tip,"2 players: rotate device clockwise for portrait play");
+ lv_label_set_text(tip,"Turn device clockwise for portrait play");
  lv_obj_set_style_text_color(tip,lv_color_hex(0x8EA0B6),0);
- lv_obj_align(tip,LV_ALIGN_BOTTOM_MID,0,-46);
- char lvl[48];
- snprintf(lvl,sizeof(lvl),"1P LEVEL %d/4: %s",level,levelNames[level-1]);
- lv_label_set_text(levelLabel,lvl);
+ lv_obj_align(tip,LV_ALIGN_BOTTOM_MID,0,-38);
 }
 static void resetGame(){
- mcumax_init();
+ if(!vsAI&&knightsOnly){
+  // Standard kings on e1/e8; every other piece is a knight.
+  // FEN import is native to mcu-max; no engine internals modified.
+  mcumax_set_fen_position("nnnnknnn/nnnnnnnn/8/8/8/8/NNNNNNNN/NNNNKNNN w - - 0 1");
+ }else mcumax_init();
  historyCount=0;selected=-1;awaitingAI=false;
  strcpy(lastText,"Tap a piece to begin");
  refreshLegal();
@@ -420,48 +421,51 @@ void loop(){
  if(s>=0)queuedSquare=-1;
  bool dirty=false;
  if(a){
-  bool newLayout=false;
+  bool rebuild=false;
+  int target=0; // 1 main menu, 2 two-player setup, 3 game
   switch(a){
    case 1:if(inGame)resetGame();break;
    case 2:if(inGame&&vsAI&&level<=2)undoMove();break;
-   case 4:if(vsAI||!inGame)level=level%4+1;break;
-   case 5:vsAI=true;resetGame();newLayout=true;break;
-   case 6:vsAI=false;resetGame();newLayout=true;break;
-   case 7:newLayout=true;break;
+   case 4:if(inGame&&vsAI)level=level%4+1;break;
+   case 5:vsAI=true;resetGame();rebuild=true;target=3;break;
+   case 6:vsAI=false;rebuild=true;target=2;break;
+   case 7:rebuild=true;target=1;break;
+   case 8:if(twoPlayerSetup){knightsOnly=!knightsOnly;}break;
+   case 9:if(twoPlayerSetup){vsAI=false;resetGame();rebuild=true;target=3;}break;
+   case 10:if(inGame&&!vsAI){rebuild=true;target=2;}break;
+   default:break;
   }
   dirty=true;
-  if(newLayout){
+  if(rebuild){
    if(esp_lv_adapter_lock(1000)==ESP_OK){
-    if(a==7)createHome();else createGameUI();
+    if(target==1)createHome();
+    else if(target==2)createTwoPlayerSetup();
+    else if(target==3)createGameUI();
     esp_lv_adapter_unlock();
+    dirty=false;
    }
-   dirty=false;
   }
  }
  if(inGame&&s>=0&&s<128&&!(s&0x88)){
   squareClicked((uint8_t)s);dirty=true;
  }
  if(dirty){
-  Serial.println("Chess: redraw start");
-  if(esp_lv_adapter_lock(1000) == ESP_OK){
+  if(esp_lv_adapter_lock(1000)==ESP_OK){
    if(inGame)drawBoard();
-   else if(levelLabel){
-    char lvl[48];snprintf(lvl,sizeof(lvl),"1P LEVEL %d/4: %s",level,levelNames[level-1]);
-    lv_label_set_text(levelLabel,lvl);
-   }
-   esp_lv_adapter_unlock();Serial.println("Chess: redraw done");
-  }
-  else Serial.println("Chess: LVGL lock timeout");
+   else if(twoPlayerSetup&&variantLabel)
+    lv_label_set_text(variantLabel,knightsOnly?"MODE: KNIGHTS ONLY":"MODE: STANDARD");
+   esp_lv_adapter_unlock();
+  }else Serial.println("Chess: LVGL lock timeout");
  }
  if(inGame&&awaitingAI){
-  delay(60); // Let LVGL paint the thinking indicator before search begins.
+  delay(60);
   mcumax_move best=selectComputerMove();
   if(best.from!=MCUMAX_SQUARE_INVALID&&mcumax_play_move(best)){
    if(historyCount<512)history[historyCount++]=best;
    moveText(best,true);
   }else strcpy(lastText,"Computer could not find a move");
   awaitingAI=false;selected=-1;refreshLegal();
-  if(esp_lv_adapter_lock(-1) == ESP_OK){drawBoard();esp_lv_adapter_unlock();}
+  if(esp_lv_adapter_lock(-1)==ESP_OK){drawBoard();esp_lv_adapter_unlock();}
  }
  delay(12);
 }
