@@ -380,7 +380,7 @@ static void showEndModal(){
  lv_obj_set_style_pad_all(panel,0,0);
  lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
  const char *headline=endReason==END_INFILTRATION?"INFILTRATION":
-                       endReason==END_EXPOSED?"SPOTTED!":
+                       endReason==END_EXPOSED?"SPOTTED":
                        endReason==END_CHECKMATE?"CHECKMATE":
                        endReason==END_STALEMATE?"STALEMATE":"DRAW";
  lv_obj_t *title=lv_label_create(panel);
