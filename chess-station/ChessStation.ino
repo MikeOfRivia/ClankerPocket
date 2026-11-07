@@ -181,17 +181,17 @@ void setup(){
   static_cast<BusRGB*>(bus)->configRGB_BounceBufferSize(lcd->getFrameWidth()*10);
  }
  assert(board->begin());
- auto cfg=ESP_LV_ADAPTER_DEFAULT_CONFIG();
+ esp_lv_adapter_config_t cfg=ESP_LV_ADAPTER_DEFAULT_CONFIG();
  cfg.task_stack_size=12*1024;
  cfg.task_priority=2;
  cfg.task_core_id=ARDUINO_RUNNING_CORE;
  ESP_ERROR_CHECK(esp_lv_adapter_init(&cfg));
- auto displayCfg=ESP_LV_ADAPTER_DISPLAY_RGB_DEFAULT_CONFIG(lcd,lcd->getFrameWidth(),lcd->getFrameHeight(),rotation);
+ esp_lv_adapter_display_config_t displayCfg=ESP_LV_ADAPTER_DISPLAY_RGB_DEFAULT_CONFIG(lcd,lcd->getFrameWidth(),lcd->getFrameHeight(),rotation);
  displayCfg.profile.use_psram=true;
  lv_display_t *disp=esp_lv_adapter_register_display(&displayCfg);
  assert(disp);
  if(board->getTouch()){
-  auto touchCfg=ESP_LV_ADAPTER_TOUCH_DEFAULT_CONFIG(disp,board->getTouch());
+  esp_lv_adapter_touch_config_t touchCfg=ESP_LV_ADAPTER_TOUCH_DEFAULT_CONFIG(disp,board->getTouch());
   assert(esp_lv_adapter_register_touch(&touchCfg));
  }
  ESP_ERROR_CHECK(esp_lv_adapter_start());
