@@ -10,12 +10,17 @@ using namespace esp_panel::board;
 
 static lv_obj_t *cells[64], *pieces[64], *moveDots[64], *statusLabel, *modeLabel, *levelLabel, *lastLabel, *undoButton;
 static bool inGame=false;
-enum GameVariant : uint8_t { VARIANT_STANDARD=0, VARIANT_KNIGHTS=1, VARIANT_PAWNS=2 };
+enum GameVariant : uint8_t { VARIANT_STANDARD=0, VARIANT_KNIGHTS=1, VARIANT_PAWNS=2, VARIANT_SPY=3 };
 static GameVariant variant=VARIANT_STANDARD;
-static lv_obj_t *modeOverlay=nullptr;
+static lv_obj_t *modeOverlay=nullptr, *endOverlay=nullptr;
+enum EndReason : uint8_t { END_NONE=0, END_CHECKMATE, END_STALEMATE, END_INFILTRATION, END_EXPOSED };
+static EndReason endReason=END_NONE;
+static uint8_t spyChecks[2]={0,0}; // White and Black checks received.
+static int8_t winnerSide=-1; // 0 white, 1 black; -1 draw or unfinished.
+static bool endModalShown=false;
 static lv_obj_t *turnFrame[2]={nullptr,nullptr};
 static int8_t renderedTurn=-1;
-static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":"STANDARD";}
+static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":variant==VARIANT_SPY?"SPY KINGS":"STANDARD";}
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
@@ -46,9 +51,36 @@ static const uint8_t nonOptimalPercent[]={100,60,25,0};
 static bool hasFrom(uint8_t sq){for(uint32_t i=0;i<validCount&&i<256;i++)if(validMoves[i].from==sq)return true;return false;}
 static bool canMove(uint8_t from,uint8_t to){for(uint32_t i=0;i<validCount&&i<256;i++)if(validMoves[i].from==from&&validMoves[i].to==to)return true;return false;}
 
+static int checkedKingSquare();
 static void refreshLegal(){
  validCount=mcumax_search_valid_moves(validMoves,256);
- gameOver=(validCount==0);
+ if(endReason!=END_NONE){gameOver=true;return;}
+ if(validCount==0){
+  gameOver=true;
+  endReason=(checkedKingSquare()>=0)?END_CHECKMATE:END_STALEMATE;
+  winnerSide=(endReason==END_CHECKMATE&&(vsAI||variant!=VARIANT_SPY))?
+    ((mcumax_get_current_side()==0x10)?0:1):-1;
+ }else gameOver=false;
+}
+static void resolveSpyMove(mcumax_move m){
+ if(vsAI||variant!=VARIANT_SPY)return;
+ const bool moverBlack=(mcumax_get_current_side()!=0x10);
+ const mcumax_piece arrived=mcumax_get_piece(m.to);
+ if((arrived&7)==MCUMAX_KING &&
+    ((moverBlack&&(m.to>>4)==7)||(!moverBlack&&(m.to>>4)==0))){
+  endReason=END_INFILTRATION;
+  winnerSide=moverBlack?1:0;
+  return;
+ }
+ // Count one exposure for each legal move that gives check.
+ if(checkedKingSquare()>=0){
+  const int exposed=(mcumax_get_current_side()==0x10)?1:0;
+  if(spyChecks[exposed]<3)spyChecks[exposed]++;
+  if(spyChecks[exposed]>=3){
+   endReason=END_EXPOSED;
+   winnerSide=exposed?0:1;
+  }
+ }
 }
 
 // A lightweight, varied opponent for the lower settings. Legal moves come
@@ -304,15 +336,16 @@ static void openSelectionModal(){
   newButton(panel,48,191,292,55,"INTERMEDIATE",17);
   newButton(panel,48,254,292,55,"MAX ENGINE",18);
  }else{
-  newButton(panel,48,80,292,62,"STANDARD",11);
-  newButton(panel,48,155,292,62,"KNIGHTS ONLY",12);
-  newButton(panel,48,230,292,62,"PAWNS ONLY",13);
+  newButton(panel,48,66,292,53,"STANDARD",11);
+  newButton(panel,48,126,292,53,"KNIGHTS ONLY",12);
+  newButton(panel,48,186,292,53,"PAWNS ONLY",13);
+  newButton(panel,48,246,292,53,"SPY KINGS",19);
  }
  newButton(panel,76,362,236,52,"CANCEL",14);
 }
 
 static void createGameUI(){
- inGame=true;modeOverlay=nullptr;
+ inGame=true;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;
  renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
@@ -412,7 +445,7 @@ static void createGameUI(){
 }
 
 static void createHome(){
- inGame=false;modeOverlay=nullptr;
+ inGame=false;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
@@ -444,6 +477,7 @@ static void resetGame(){
   mcumax_set_fen_position("ppppkppp/pppppppp/8/8/8/8/PPPPPPPP/PPPPKPPP w - - 0 1");
  }else mcumax_init();
  historyCount=0;selected=-1;awaitingAI=false;
+ endReason=END_NONE;winnerSide=-1;spyChecks[0]=spyChecks[1]=0;endModalShown=false;
  strcpy(lastText,"Tap a piece to begin");
  refreshLegal();
 }
@@ -466,7 +500,7 @@ static void squareClicked(uint8_t sq){
   mcumax_move m={(uint8_t)selected,sq};
   if(mcumax_play_move(m)){
    if(historyCount<512)history[historyCount++]=m;
-   moveText(m,false);selected=-1;refreshLegal();
+   moveText(m,false);selected=-1;resolveSpyMove(m);refreshLegal();
    awaitingAI=vsAI&&!gameOver&&mcumax_get_current_side()==0x10;
    return;
   }
@@ -535,9 +569,9 @@ void loop(){
     closeModeModal();
     esp_lv_adapter_unlock();
    }
-  }else if(modeOverlay&&((vsAI&&a>=15&&a<=18)||(!vsAI&&a>=11&&a<=13))){
+  }else if(modeOverlay&&((vsAI&&a>=15&&a<=18)||(!vsAI&&((a>=11&&a<=13)||a==19)))){
    if(vsAI)level=(uint8_t)(a-14);
-   else variant=(GameVariant)(a-11);
+   else variant=(a==19)?VARIANT_SPY:(GameVariant)(a-11);
    resetGame();
    if(esp_lv_adapter_lock(1000)==ESP_OK){
     createGameUI();
@@ -562,6 +596,7 @@ void loop(){
   if(best.from!=MCUMAX_SQUARE_INVALID&&mcumax_play_move(best)){
    if(historyCount<512)history[historyCount++]=best;
    moveText(best,true);
+   resolveSpyMove(best);
   }else strcpy(lastText,"Computer could not find a move");
   awaitingAI=false;selected=-1;refreshLegal();
   if(esp_lv_adapter_lock(-1)==ESP_OK){drawBoard();esp_lv_adapter_unlock();}
