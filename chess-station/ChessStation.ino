@@ -13,6 +13,8 @@ static bool inGame=false, twoPlayerSetup=false;
 enum GameVariant : uint8_t { VARIANT_STANDARD=0, VARIANT_KNIGHTS=1, VARIANT_PAWNS=2 };
 static GameVariant variant=VARIANT_STANDARD;
 static lv_obj_t *variantLabel=nullptr, *modeOverlay=nullptr;
+static lv_obj_t *turnFrame[2]={nullptr,nullptr};
+static int8_t renderedTurn=-1;
 static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":"STANDARD";}
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
@@ -199,7 +201,20 @@ static void drawBoard(){
    renderedColor[i]=bg;
   }
  }
- if(!vsAI)return;
+ if(!vsAI){
+  // Each portrait-side player gets a thin yellow perimeter around the
+  // four ranks closest to them. Board coordinates: White=left, Black=right.
+  const int active=blackToMove?1:0;
+  if(renderedTurn!=active){
+   for(int side=0;side<2;side++){
+    if(!turnFrame[side])continue;
+    if(side==active)lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(turnFrame[side],LV_OBJ_FLAG_HIDDEN);
+   }
+   renderedTurn=active;
+  }
+  return;
+ }
  lv_label_set_text(statusLabel,gameOver?(checkedKing>=0?"CHECKMATE!":"STALEMATE"):(checkedKing>=0?(blackToMove?"CHECK! BLACK KING":"CHECK! WHITE KING"):(awaitingAI?"Computer thinking...":blackToMove?"Black to move":"White to move")));
  lv_obj_set_style_text_color(statusLabel,checkedKing>=0?lv_color_hex(0xFF626B):lv_color_hex(0xC3D6EC),0);
 
@@ -276,6 +291,8 @@ static void openModeModal(){
 
 static void createGameUI(){
  inGame=true;twoPlayerSetup=false;modeOverlay=nullptr;
+ turnFrame[0]=turnFrame[1]=nullptr;
+ renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
  for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;renderedDot[i]=255;}
@@ -332,6 +349,24 @@ static void createGameUI(){
   lv_obj_remove_flag(moveDots[i],LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_flag(moveDots[i],LV_OBJ_FLAG_HIDDEN);
  }
+ if(!vsAI){
+  // Portrait board is 432x432 at (184,24). A half is 216x432.
+  // Borders are non-clickable objects layered above the squares.
+  for(int side=0;side<2;side++){
+   turnFrame[side]=lv_obj_create(screen);
+   lv_obj_set_pos(turnFrame[side],184+side*216,24);
+   lv_obj_set_size(turnFrame[side],216,432);
+   lv_obj_set_style_radius(turnFrame[side],0,0);
+   lv_obj_set_style_pad_all(turnFrame[side],0,0);
+   lv_obj_set_style_bg_opa(turnFrame[side],LV_OPA_TRANSP,0);
+   lv_obj_set_style_border_width(turnFrame[side],4,0);
+   lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0xFFD348),0);
+   lv_obj_set_style_shadow_width(turnFrame[side],0,0);
+   lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_CLICKABLE);
+   lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_SCROLLABLE);
+   lv_obj_add_flag(turnFrame[side],LV_OBJ_FLAG_HIDDEN);
+  }
+ }
  if(vsAI){
  statusLabel=lv_label_create(screen);
  lv_obj_set_style_text_color(statusLabel,lv_color_hex(0xC3D6EC),0);
@@ -353,6 +388,7 @@ static void createGameUI(){
 
 static void createHome(){
  inGame=false;twoPlayerSetup=false;modeOverlay=nullptr;
+ turnFrame[0]=turnFrame[1]=nullptr;renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=variantLabel=nullptr;
@@ -368,6 +404,7 @@ static void createHome(){
 }
 static void createTwoPlayerSetup(){
  inGame=false;twoPlayerSetup=true;modeOverlay=nullptr;
+ turnFrame[0]=turnFrame[1]=nullptr;renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
