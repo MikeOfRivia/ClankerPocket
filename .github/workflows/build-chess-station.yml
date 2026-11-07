@@ -48,7 +48,7 @@ jobs:
           npm install --global lv_font_conv@1.5.3
           lv_font_conv --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
             --range 0x2654-0x265F --size 42 --bpp 4 \
-            --format lvgl --lv-font-name chess_pieces_42 \
+            --format lvgl --lv-include lvgl.h --lv-font-name chess_pieces_42 \
             --output sketch/ChessStation/chess_pieces_42.c
           grep -q 'chess_pieces_42' sketch/ChessStation/chess_pieces_42.c
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
