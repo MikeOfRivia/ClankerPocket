@@ -228,7 +228,7 @@ static void drawBoard(){
   if(checkedKing>=0){
    const int kr=checkedKing>>4,kf=checkedKing&7;
    const int sr=sq>>4,sf=sq&7;
-   if(gameOver&&abs(sr-kr)<=1&&abs(sf-kf)<=1)
+   if(endReason==END_CHECKMATE&&abs(sr-kr)<=1&&abs(sf-kf)<=1)
     bg=(sq==checkedKing)?0xDC252B:0xC9474B;
    else if(sq==checkedKing)bg=0xDC343F;
   }
