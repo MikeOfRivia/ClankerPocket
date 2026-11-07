@@ -23,7 +23,7 @@ static char lastText[56]="Tap a piece to begin";
 static uint8_t renderedPiece[64];
 static uint32_t renderedColor[64];
 static uint8_t renderedDot[64];
-LV_FONT_DECLARE(chess_pieces_42);
+extern const lv_image_dsc_t chess_piece_images[12];
 // Level 1-3 are deliberately weakened: shallow search alone is still very
 // unforgiving at beginner ratings. No Elo claim without actual calibration.
 // Level 4 retains the strongest search budget from the previous 5-level build.
@@ -78,17 +78,17 @@ static char pieceLetter(mcumax_piece p){
   default:return '\0';
  }
 }
-// Unicode chess symbols. Generated glyph font is embedded in the firmware.
-static const char *pieceSymbol(mcumax_piece p){
- const bool black=(p&MCUMAX_BLACK)!=0;
+// Map engine pieces to our 12 pre-rendered glyph sprites (white, then black).
+static int pieceSpriteIndex(mcumax_piece p){
+ int offset=(p&MCUMAX_BLACK)?6:0;
  switch(p&7){
-  case MCUMAX_KING:return black?"♚":"♔";
-  case MCUMAX_QUEEN:return black?"♛":"♕";
-  case MCUMAX_ROOK:return black?"♜":"♖";
-  case MCUMAX_BISHOP:return black?"♝":"♗";
-  case MCUMAX_KNIGHT:return black?"♞":"♘";
-  case MCUMAX_PAWN_UPSTREAM: case MCUMAX_PAWN_DOWNSTREAM:return black?"♟":"♙";
-  default:return "";
+  case MCUMAX_KING:return offset+0;
+  case MCUMAX_QUEEN:return offset+1;
+  case MCUMAX_ROOK:return offset+2;
+  case MCUMAX_BISHOP:return offset+3;
+  case MCUMAX_KNIGHT:return offset+4;
+  case MCUMAX_PAWN_UPSTREAM: case MCUMAX_PAWN_DOWNSTREAM:return offset+5;
+  default:return -1;
  }
 }
 static void squareName(uint8_t s,char out[3]){
@@ -158,9 +158,13 @@ static void drawBoard(){
   // Only touch LVGL objects that actually changed. Rebuilding 64 labels and
   // restyling 64 buttons for a single selection caused excessive redraw work.
   if(renderedPiece[i]!=p){
-   lv_label_set_text(pieces[i],pieceSymbol(p));
-   lv_obj_center(pieces[i]);
-   lv_obj_set_style_text_color(pieces[i],(p&MCUMAX_BLACK)?lv_color_hex(0x16181F):lv_color_hex(0xFFFFFF),0);
+   int sprite=pieceSpriteIndex(p);
+   if(sprite>=0){
+    lv_image_set_src(pieces[i],&chess_piece_images[sprite]);
+    lv_obj_remove_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
+   }else{
+    lv_obj_add_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
+   }
    renderedPiece[i]=p;
   }
   const bool dark=(((i>>3)+(i&7))&1);
@@ -228,9 +232,11 @@ static void createUI(){
   lv_obj_set_style_shadow_width(cells[i],0,0);
   lv_obj_set_style_pad_all(cells[i],0,0);
   lv_obj_add_event_cb(cells[i],boardPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)(((r<<4)|c)));
-  pieces[i]=lv_label_create(cells[i]);
-  lv_obj_set_style_text_font(pieces[i],&chess_pieces_42,0);
+  pieces[i]=lv_image_create(cells[i]);
+  lv_obj_set_size(pieces[i],44,44);
   lv_obj_center(pieces[i]);
+  lv_obj_remove_flag(pieces[i],LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
   moveDots[i]=lv_obj_create(cells[i]);
   lv_obj_set_size(moveDots[i],16,16);
   lv_obj_set_style_radius(moveDots[i],LV_RADIUS_CIRCLE,0);
