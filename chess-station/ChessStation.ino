@@ -296,7 +296,7 @@ static void createGameUI(){
  lv_obj_set_style_text_color(levelLabel,lv_color_hex(0xFFFFFF),0);
  newButton(screen,476,180,145,46,"NEW GAME",1);
  undoButton=newButton(screen,633,180,145,46,"UNDO",2);
- newButton(screen,476,238,302,46,"TOGGLE 1P / 2P",3);
+ newButton(screen,476,238,302,46,"RETURN TO MENU",7);
  newButton(screen,476,296,302,46,"CHANGE DIFFICULTY",4);
  lastLabel=lv_label_create(screen);
  lv_obj_set_width(lastLabel,302);
@@ -421,7 +421,6 @@ void loop(){
   switch(a){
    case 1:if(inGame)resetGame();break;
    case 2:if(inGame&&vsAI&&level<=2)undoMove();break;
-   case 3:break;
    case 4:if(vsAI||!inGame)level=level%4+1;break;
    case 5:vsAI=true;resetGame();newLayout=true;break;
    case 6:vsAI=false;resetGame();newLayout=true;break;
