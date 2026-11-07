@@ -9,8 +9,11 @@ using namespace esp_panel::drivers;
 using namespace esp_panel::board;
 
 static lv_obj_t *cells[64], *pieces[64], *moveDots[64], *statusLabel, *modeLabel, *levelLabel, *lastLabel, *undoButton;
-static bool inGame=false, twoPlayerSetup=false, knightsOnly=false;
-static lv_obj_t *variantLabel=nullptr;
+static bool inGame=false, twoPlayerSetup=false;
+enum GameVariant : uint8_t { VARIANT_STANDARD=0, VARIANT_KNIGHTS=1, VARIANT_PAWNS=2 };
+static GameVariant variant=VARIANT_STANDARD;
+static lv_obj_t *variantLabel=nullptr, *modeOverlay=nullptr;
+static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":"STANDARD";}
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
@@ -226,8 +229,53 @@ static lv_obj_t *newButton(lv_obj_t *parent,int x,int y,int w,int h,const char *
  return b;
 }
 
+
+// LVGL objects must be created/destroyed while holding the adapter lock.
+// This is a non-destructive overlay: the underlying game and board persist.
+static void closeModeModal(){
+ if(modeOverlay){lv_obj_delete(modeOverlay);modeOverlay=nullptr;}
+}
+static void openModeModal(){
+ if(modeOverlay||vsAI)return;
+ modeOverlay=lv_obj_create(screen);
+ lv_obj_set_pos(modeOverlay,0,0);
+ lv_obj_set_size(modeOverlay,800,480);
+ lv_obj_set_style_radius(modeOverlay,0,0);
+ lv_obj_set_style_pad_all(modeOverlay,0,0);
+ lv_obj_set_style_border_width(modeOverlay,0,0);
+ lv_obj_set_style_bg_color(modeOverlay,lv_color_hex(0x0A111B),0);
+ lv_obj_set_style_bg_opa(modeOverlay,LV_OPA_90,0);
+ lv_obj_add_flag(modeOverlay,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_remove_flag(modeOverlay,LV_OBJ_FLAG_SCROLLABLE);
+
+ lv_obj_t *panel=lv_obj_create(modeOverlay);
+ lv_obj_set_pos(panel,212,20);
+ lv_obj_set_size(panel,376,440);
+ lv_obj_set_style_radius(panel,16,0);
+ lv_obj_set_style_bg_color(panel,lv_color_hex(0x182637),0);
+ lv_obj_set_style_border_color(panel,lv_color_hex(0xCDA45C),0);
+ lv_obj_set_style_border_width(panel,2,0);
+ lv_obj_set_style_pad_all(panel,0,0);
+ lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
+
+ lv_obj_t *heading=lv_label_create(panel);
+ lv_label_set_text(heading,"CHOOSE GAME MODE");
+ lv_obj_set_style_text_color(heading,lv_color_hex(0xF4D58C),0);
+ lv_obj_set_style_text_font(heading,&lv_font_montserrat_24,0);
+ lv_obj_align(heading,LV_ALIGN_TOP_MID,0,20);
+
+ newButton(panel,48,74,280,56,"STANDARD",11);
+ newButton(panel,48,142,280,56,"KNIGHTS ONLY",12);
+ newButton(panel,48,210,280,56,"PAWNS ONLY",13);
+ newButton(panel,48,348,280,52,"CANCEL",14);
+ lv_obj_t *note=lv_label_create(panel);
+ lv_label_set_text(note,inGame?"Choosing a mode starts a new game":"Choose a mode, then start the game");
+ lv_obj_set_style_text_color(note,lv_color_hex(0xB3C3D4),0);
+ lv_obj_align(note,LV_ALIGN_TOP_MID,0,293);
+}
+
 static void createGameUI(){
- inGame=true;
+ inGame=true;twoPlayerSetup=false;modeOverlay=nullptr;
  lv_obj_clean(lv_screen_active());
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
  for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;renderedDot[i]=255;}
@@ -304,7 +352,7 @@ static void createGameUI(){
 }
 
 static void createHome(){
- inGame=false;twoPlayerSetup=false;
+ inGame=false;twoPlayerSetup=false;modeOverlay=nullptr;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=variantLabel=nullptr;
@@ -319,7 +367,7 @@ static void createHome(){
  newButton(screen,275,345,250,65,"2 PLAYERS",6);
 }
 static void createTwoPlayerSetup(){
- inGame=false;twoPlayerSetup=true;
+ inGame=false;twoPlayerSetup=true;modeOverlay=nullptr;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
@@ -333,7 +381,7 @@ static void createTwoPlayerSetup(){
  variantLabel=lv_label_create(screen);
  lv_obj_set_style_text_color(variantLabel,lv_color_hex(0xFFFFFF),0);
  lv_obj_align(variantLabel,LV_ALIGN_TOP_MID,0,120);
- lv_label_set_text(variantLabel,knightsOnly?"MODE: KNIGHTS ONLY":"MODE: STANDARD");
+ lv_label_set_text(variantLabel,variantName());
  newButton(screen,270,165,260,55,"CHANGE MODE",8);
  newButton(screen,270,239,260,60,"START GAME",9);
  newButton(screen,270,317,260,52,"RETURN TO MENU",7);
@@ -343,10 +391,13 @@ static void createTwoPlayerSetup(){
  lv_obj_align(tip,LV_ALIGN_BOTTOM_MID,0,-38);
 }
 static void resetGame(){
- if(!vsAI&&knightsOnly){
-  // Standard kings on e1/e8; every other piece is a knight.
-  // FEN import is native to mcu-max; no engine internals modified.
+ if(!vsAI&&variant==VARIANT_KNIGHTS){
+  // Kings and 15 knights per side. No castling.
   mcumax_set_fen_position("nnnnknnn/nnnnnnnn/8/8/8/8/NNNNNNNN/NNNNKNNN w - - 0 1");
+ }else if(!vsAI&&variant==VARIANT_PAWNS){
+  // Kings and 15 pawns per side. Rear-rank pawns advance after
+  // the normal pawns clear the way. No castling.
+  mcumax_set_fen_position("ppppkppp/pppppppp/8/8/8/8/PPPPPPPP/PPPPKPPP w - - 0 1");
  }else mcumax_init();
  historyCount=0;selected=-1;awaitingAI=false;
  strcpy(lastText,"Tap a piece to begin");
@@ -430,9 +481,28 @@ void loop(){
    case 5:vsAI=true;resetGame();rebuild=true;target=3;break;
    case 6:vsAI=false;rebuild=true;target=2;break;
    case 7:rebuild=true;target=1;break;
-   case 8:if(twoPlayerSetup){knightsOnly=!knightsOnly;}break;
+   case 8:if(twoPlayerSetup&&!vsAI){
+    if(esp_lv_adapter_lock(1000)==ESP_OK){openModeModal();esp_lv_adapter_unlock();}
+   }break;
    case 9:if(twoPlayerSetup){vsAI=false;resetGame();rebuild=true;target=3;}break;
-   case 10:if(inGame&&!vsAI){rebuild=true;target=2;}break;
+   case 10:if(inGame&&!vsAI){
+    if(esp_lv_adapter_lock(1000)==ESP_OK){openModeModal();esp_lv_adapter_unlock();}
+   }break;
+   case 11:case 12:case 13:
+    if(!vsAI&&modeOverlay){
+     variant=(GameVariant)(a-11);
+     if(inGame)resetGame();
+     if(esp_lv_adapter_lock(1000)==ESP_OK){
+      closeModeModal();
+      if(inGame)drawBoard();
+      else if(twoPlayerSetup&&variantLabel)lv_label_set_text(variantLabel,variantName());
+      esp_lv_adapter_unlock();
+     }
+    }
+    break;
+   case 14:
+    if(esp_lv_adapter_lock(1000)==ESP_OK){closeModeModal();esp_lv_adapter_unlock();}
+    break;
    default:break;
   }
   dirty=true;
@@ -453,7 +523,7 @@ void loop(){
   if(esp_lv_adapter_lock(1000)==ESP_OK){
    if(inGame)drawBoard();
    else if(twoPlayerSetup&&variantLabel)
-    lv_label_set_text(variantLabel,knightsOnly?"MODE: KNIGHTS ONLY":"MODE: STANDARD");
+    lv_label_set_text(variantLabel,variantName());
    esp_lv_adapter_unlock();
   }else Serial.println("Chess: LVGL lock timeout");
  }
