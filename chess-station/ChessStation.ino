@@ -20,6 +20,8 @@ static uint32_t validCount=0;
 static mcumax_move history[512];
 static int historyCount=0;
 static char lastText[56]="Tap a piece to begin";
+static uint8_t renderedPiece[64];
+static uint32_t renderedColor[64];
 static const uint32_t limits[]={350,1500,6000,18000,45000};
 static const uint8_t depths[]={2,3,4,5,6};
 
@@ -58,13 +60,22 @@ static void drawBoard(){
   mcumax_piece p=mcumax_get_piece(sq);
   char letter=pieceLetter(p);
   char t[2]={letter,0};
-  lv_label_set_text(pieces[i],letter?t:"");lv_obj_center(pieces[i]);
-  lv_obj_set_style_text_color(pieces[i],(p&MCUMAX_BLACK)?lv_color_hex(0x16181F):lv_color_hex(0xFFFFFF),0);
+  // Only touch LVGL objects that actually changed. Rebuilding 64 labels and
+  // restyling 64 buttons for a single selection caused excessive redraw work.
+  if(renderedPiece[i]!=p){
+   lv_label_set_text(pieces[i],letter?t:"");
+   lv_obj_center(pieces[i]);
+   lv_obj_set_style_text_color(pieces[i],(p&MCUMAX_BLACK)?lv_color_hex(0x16181F):lv_color_hex(0xFFFFFF),0);
+   renderedPiece[i]=p;
+  }
   const bool dark=(((i>>3)+(i&7))&1);
   uint32_t bg=dark?0x71926F:0xE9E3C9;
   if(selected==(int)sq)bg=0xE6B448;
   else if(selected>=0&&canMove((uint8_t)selected,sq))bg=0x93B5CD;
-  lv_obj_set_style_bg_color(cells[i],lv_color_hex(bg),0);
+  if(renderedColor[i]!=bg){
+   lv_obj_set_style_bg_color(cells[i],lv_color_hex(bg),0);
+   renderedColor[i]=bg;
+  }
  }
  lv_label_set_text(statusLabel,gameOver?"No legal moves - Game over":awaitingAI?"Computer thinking...":blackToMove?"Black to move":"White to move");
  lv_label_set_text(modeLabel,vsAI?"MODE: VS COMPUTER":"MODE: TWO PLAYERS");
@@ -91,6 +102,7 @@ static lv_obj_t *newButton(lv_obj_t *parent,int x,int y,int w,int h,const char *
 }
 
 static void createUI(){
+ for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;}
  screen=lv_screen_active();
  lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
  lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
@@ -153,6 +165,7 @@ static void undoMove(){
  refreshLegal();
 }
 static void squareClicked(uint8_t sq){
+ Serial.printf("Chess: touch square=%u selected=%d\\n",sq,selected);
  if(gameOver||awaitingAI||(vsAI&&mcumax_get_current_side()==0x10))return;
  mcumax_piece p=mcumax_get_piece(sq);
  bool own=pieceLetter(p)&&((p&MCUMAX_BLACK)==(mcumax_get_current_side()==0x10?MCUMAX_BLACK:0));
@@ -161,11 +174,12 @@ static void squareClicked(uint8_t sq){
   if(mcumax_play_move(m)){
    if(historyCount<512)history[historyCount++]=m;
    moveText(m,false);selected=-1;refreshLegal();
-   awaitingAI=vsAI&&!gameOver&&mcumax_get_current_side()==MCUMAX_BLACK;
+   awaitingAI=vsAI&&!gameOver&&mcumax_get_current_side()==0x10;
    return;
   }
  }
  selected=own&&hasFrom(sq)?sq:-1;
+ Serial.printf("Chess: selection=%d\\n",selected);
 }
 void setup(){
  Serial.begin(115200);
@@ -220,7 +234,9 @@ void loop(){
   squareClicked((uint8_t)s);dirty=true;
  }
  if(dirty){
-  if(esp_lv_adapter_lock(-1)){drawBoard();esp_lv_adapter_unlock();}
+  Serial.println("Chess: redraw start");
+  if(esp_lv_adapter_lock(1000)){drawBoard();esp_lv_adapter_unlock();Serial.println("Chess: redraw done");}
+  else Serial.println("Chess: LVGL lock timeout");
  }
  if(awaitingAI){
   delay(60); // Let LVGL paint the thinking indicator before search begins.
