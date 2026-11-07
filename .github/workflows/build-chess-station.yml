@@ -42,6 +42,7 @@ jobs:
           cp chess-station/ChessStation.ino sketch/ChessStation/ChessStation.ino
           git clone --depth 1 https://github.com/Gissio/mcu-max.git engine
           cp engine/src/mcu-max.c engine/src/mcu-max.h sketch/ChessStation/
+          python3 chess-station/patch-fen-pawns.py sketch/ChessStation/mcu-max.c
           # Pre-render 12 chess symbols as transparent 44px LVGL image assets.
           # The previous LVGL font path triggered a watchdog in glyph drawing.
           sudo apt-get update -qq
