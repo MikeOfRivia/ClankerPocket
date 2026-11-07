@@ -37,9 +37,9 @@ jobs:
           # Non-Xtensa optimized assembly backends aren't needed by the demo.
           find deps/lvgl -name '*.S' -type f -delete
           cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
-          sed -i 's/^#if 0 \/\*Set it to "1" to enable content\*\//#if 1 \/\*Set it to "1" to enable content\*\//' deps/lv_conf.h
+          sed -i 's/^#if 0 \/\* Set this to "1" to enable content \*\//#if 1 \/\* Set this to "1" to enable content \*\//' deps/lv_conf.h
           sed -i -E 's/^#define LV_USE_DEMO_WIDGETS[[:space:]]+0/#define LV_USE_DEMO_WIDGETS 1/' deps/lv_conf.h
-          grep -q '^#define LV_USE_DEMO_WIDGETS 1' deps/lv_conf.h
+          grep -Eq '^[[:space:]]*#define LV_USE_DEMO_WIDGETS 1' deps/lv_conf.h
           grep -q '^#define ESP_OPEN_TOUCH 1' sketch/10_lvgl_v9_demo/esp_panel_board_custom_conf.h
           echo 'Official Waveshare touch is enabled.'
 
