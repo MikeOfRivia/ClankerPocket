@@ -13,7 +13,7 @@ static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
 static bool vsAI=true, awaitingAI=false, gameOver=false;
-static uint8_t level=2;
+static uint8_t level=3; // Intermediate, intended as the user's starting difficulty
 static int selected=-1;
 static mcumax_move validMoves[256];
 static uint32_t validCount=0;
@@ -22,16 +22,47 @@ static int historyCount=0;
 static char lastText[56]="Tap a piece to begin";
 static uint8_t renderedPiece[64];
 static uint32_t renderedColor[64];
-static const uint32_t limits[]={350,1500,6000,18000,45000};
-static const uint8_t depths[]={2,3,4,5,6};
+// Level 1-3 are deliberately weakened: shallow search alone is still very
+// unforgiving at beginner ratings. No Elo claim without actual calibration.
+// Level 4 retains the strongest search budget from the previous 5-level build.
+static const char *levelNames[]={"BEGINNER","NOVICE","INTERMEDIATE","MAX ENGINE"};
+static const uint32_t limits[]={0,250,500,45000};
+static const uint8_t depths[]={0,2,3,6};
+// Chance that weaker settings choose a simple legal move instead of engine best.
+static const uint8_t nonOptimalPercent[]={100,60,25,0};
 
-static bool sameMove(mcumax_move a,mcumax_move b){return a.from==b.from&&a.to==b.to;}
+
 static bool hasFrom(uint8_t sq){for(uint32_t i=0;i<validCount&&i<256;i++)if(validMoves[i].from==sq)return true;return false;}
 static bool canMove(uint8_t from,uint8_t to){for(uint32_t i=0;i<validCount&&i<256;i++)if(validMoves[i].from==from&&validMoves[i].to==to)return true;return false;}
 
 static void refreshLegal(){
  validCount=mcumax_search_valid_moves(validMoves,256);
  gameOver=(validCount==0);
+}
+
+// A lightweight, varied opponent for the lower settings. Legal moves come
+// from mcu-max, so even the beginner never makes an illegal move.
+static mcumax_move selectComputerMove(){
+ if(validCount==0)return {MCUMAX_SQUARE_INVALID,MCUMAX_SQUARE_INVALID};
+ const int count=(validCount>256)?256:(int)validCount;
+ if(random(100)<nonOptimalPercent[level-1]){
+  // Beginners recognize some captures but also miss opportunities.
+  uint16_t weights[256];
+  uint32_t total=0;
+  for(int i=0;i<count;i++){
+   mcumax_piece victim=mcumax_get_piece(validMoves[i].to);
+   // Captures are attractive but not always chosen.
+   weights[i]=1+((victim&7)?3:0);
+   total+=weights[i];
+  }
+  uint32_t roll=(uint32_t)random((long)total);
+  for(int i=0;i<count;i++){
+   if(roll<weights[i])return validMoves[i];
+   roll-=weights[i];
+  }
+  return validMoves[count-1];
+ }
+ return mcumax_search_best_move(limits[level-1],depths[level-1]);
 }
 
 static char pieceLetter(mcumax_piece p){
@@ -132,7 +163,7 @@ static void drawBoard(){
  lv_label_set_text(statusLabel,gameOver?(checkedKing>=0?"CHECKMATE!":"STALEMATE"):(checkedKing>=0?(blackToMove?"CHECK! BLACK KING":"CHECK! WHITE KING"):(awaitingAI?"Computer thinking...":blackToMove?"Black to move":"White to move")));
  lv_obj_set_style_text_color(statusLabel,checkedKing>=0?lv_color_hex(0xFF626B):lv_color_hex(0xC3D6EC),0);
  lv_label_set_text(modeLabel,vsAI?"MODE: VS COMPUTER":"MODE: TWO PLAYERS");
- char lvl[40];snprintf(lvl,sizeof(lvl),"LEVEL: %d / 5",level);
+ char lvl[48];snprintf(lvl,sizeof(lvl),"LEVEL %d/4: %s",level,levelNames[level-1]);
  lv_label_set_text(levelLabel,lvl);
  lv_label_set_text(lastLabel,lastText);
 }
@@ -236,6 +267,7 @@ static void squareClicked(uint8_t sq){
 }
 void setup(){
  Serial.begin(115200);
+ randomSeed(esp_random());
  Board *board=new Board();
  if(!board||!board->init()){Serial.println("Board init failed");while(true)delay(1000);}
  auto rotation=ESP_LV_ADAPTER_ROTATE_0;
@@ -279,7 +311,7 @@ void loop(){
    case 1:resetGame();break;
    case 2:undoMove();break;
    case 3:vsAI=!vsAI;resetGame();break;
-   case 4:level=level%5+1;break;
+   case 4:level=level%4+1;break;
   }
   dirty=true;
  }
@@ -293,7 +325,7 @@ void loop(){
  }
  if(awaitingAI){
   delay(60); // Let LVGL paint the thinking indicator before search begins.
-  mcumax_move best=mcumax_search_best_move(limits[level-1],depths[level-1]);
+  mcumax_move best=selectComputerMove();
   if(best.from!=MCUMAX_SQUARE_INVALID&&mcumax_play_move(best)){
    if(historyCount<512)history[historyCount++]=best;
    moveText(best,true);
