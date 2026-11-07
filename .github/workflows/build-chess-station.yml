@@ -42,15 +42,14 @@ jobs:
           cp chess-station/ChessStation.ino sketch/ChessStation/ChessStation.ino
           git clone --depth 1 https://github.com/Gissio/mcu-max.git engine
           cp engine/src/mcu-max.c engine/src/mcu-max.h sketch/ChessStation/
-          # Embed only the 12 chess symbols, avoiding a full Unicode font in firmware.
+          # Pre-render 12 chess symbols as transparent 44px LVGL image assets.
+          # The previous LVGL font path triggered a watchdog in glyph drawing.
           sudo apt-get update -qq
-          sudo apt-get install -y -qq fonts-dejavu-core
-          npm install --global lv_font_conv@1.5.3
-          lv_font_conv --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
-            --range 0x2654-0x265F --size 42 --bpp 4 \
-            --format lvgl --lv-include lvgl.h --lv-font-name chess_pieces_42 \
-            --output sketch/ChessStation/chess_pieces_42.c
-          grep -q 'chess_pieces_42' sketch/ChessStation/chess_pieces_42.c
+          sudo apt-get install -y -qq fonts-dejavu-core python3-pil
+          python3 chess-station/generate-chess-images.py \
+            /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            sketch/ChessStation/chess_piece_images.cpp
+          grep -q 'chess_piece_images' sketch/ChessStation/chess_piece_images.cpp
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
           find deps/lvgl -name '*.S' -type f -delete
           cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
