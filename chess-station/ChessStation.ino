@@ -244,6 +244,8 @@ static void createGameUI(){
  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0);
  lv_obj_set_style_text_color(title,lv_color_hex(0xF4D58C),0);
  lv_obj_set_pos(title,476,17);
+ }
+ // Every mode needs a full set of board objects before drawBoard().
  for(int i=0;i<64;i++){
   int r=i/8,c=i%8;
   // A plain clickable cell avoids LVGL button press recolor styles that
@@ -287,6 +289,7 @@ static void createGameUI(){
   lv_obj_remove_flag(moveDots[i],LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_flag(moveDots[i],LV_OBJ_FLAG_HIDDEN);
  }
+ if(vsAI){
  statusLabel=lv_label_create(screen);
  lv_obj_set_style_text_color(statusLabel,lv_color_hex(0xC3D6EC),0);
  lv_obj_set_pos(statusLabel,476,60);
