@@ -344,6 +344,72 @@ static void openSelectionModal(){
  newButton(panel,76,362,236,52,"CANCEL",14);
 }
 
+// An end-of-game result appears once per game, above the board.
+// New Game reopens selection; Main Menu goes home.
+static void showEndModal(){
+ if(!inGame||!gameOver||endModalShown)return;
+ endModalShown=true;
+ endOverlay=lv_obj_create(lv_screen_active());
+ lv_obj_set_pos(endOverlay,0,0);lv_obj_set_size(endOverlay,800,480);
+ lv_obj_set_style_radius(endOverlay,0,0);
+ lv_obj_set_style_pad_all(endOverlay,0,0);
+ lv_obj_set_style_border_width(endOverlay,0,0);
+ lv_obj_set_style_bg_color(endOverlay,lv_color_hex(0x020805),0);
+ lv_obj_set_style_bg_opa(endOverlay,LV_OPA_90,0);
+ lv_obj_remove_flag(endOverlay,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_add_flag(endOverlay,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_t *panel=lv_obj_create(endOverlay);
+ lv_obj_set_pos(panel,192,54);lv_obj_set_size(panel,416,372);
+ lv_obj_set_style_bg_color(panel,lv_color_hex(0x071A10),0);
+ lv_obj_set_style_border_color(panel,lv_color_hex(0x56FF73),0);
+ lv_obj_set_style_border_width(panel,2,0);
+ lv_obj_set_style_radius(panel,5,0);
+ lv_obj_set_style_pad_all(panel,0,0);
+ lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
+ const char *headline=endReason==END_INFILTRATION?"INFILTRATION":
+                       endReason==END_EXPOSED?"SPOTTED!":
+                       endReason==END_CHECKMATE?"CHECKMATE":
+                       endReason==END_STALEMATE?"STALEMATE":"DRAW";
+ lv_obj_t *title=lv_label_create(panel);
+ lv_label_set_text(title,headline);
+ lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
+ lv_obj_set_style_text_color(title,lv_color_hex(
+   (endReason==END_EXPOSED||endReason==END_CHECKMATE)?0xFF606A:0x70FF93),0);
+ lv_obj_align(title,LV_ALIGN_TOP_MID,0,35);
+ lv_obj_t *outcome=lv_label_create(panel);
+ lv_obj_set_width(outcome,370);
+ lv_label_set_long_mode(outcome,LV_LABEL_LONG_WRAP);
+ lv_obj_set_style_text_align(outcome,LV_TEXT_ALIGN_CENTER,0);
+ lv_obj_set_style_text_color(outcome,lv_color_hex(0xC8F9D4),0);
+ lv_obj_set_style_text_font(outcome,&lv_font_montserrat_24,0);
+ const char *who=winnerSide<0?"DRAW":winnerSide==0?"WHITE WINS":"BLACK WINS";
+ lv_label_set_text(outcome,who);
+ lv_obj_align(outcome,LV_ALIGN_TOP_MID,0,93);
+ lv_obj_t *detail=lv_label_create(panel);
+ lv_obj_set_width(detail,370);
+ lv_label_set_long_mode(detail,LV_LABEL_LONG_WRAP);
+ lv_obj_set_style_text_align(detail,LV_TEXT_ALIGN_CENTER,0);
+ lv_obj_set_style_text_color(detail,lv_color_hex(0x82B49A),0);
+ const char *description=endReason==END_INFILTRATION?"Enemy back rank reached":
+    endReason==END_EXPOSED?"Third check: spy exposed":
+    endReason==END_CHECKMATE?(variant==VARIANT_SPY&&!vsAI?
+       "Spy Kings: checkmate is a draw":"The king has been checkmated"):
+    "No legal moves remain";
+ lv_label_set_text(detail,description);
+ lv_obj_align(detail,LV_ALIGN_TOP_MID,0,151);
+ if(variant==VARIANT_SPY&&!vsAI){
+  lv_obj_t *counter=lv_label_create(panel);
+  char stats[64];
+  snprintf(stats,sizeof(stats),"CHECKS RECEIVED: WHITE %u/3  BLACK %u/3",
+           (unsigned)spyChecks[0],(unsigned)spyChecks[1]);
+  lv_label_set_text(counter,stats);
+  lv_obj_set_style_text_color(counter,lv_color_hex(0x9DECAC),0);
+  lv_obj_align(counter,LV_ALIGN_TOP_MID,0,196);
+ }
+ newButton(panel,30,271,168,57,"NEW GAME",1);
+ newButton(panel,218,271,168,57,"MAIN MENU",7);
+}
+
 static void createGameUI(){
  inGame=true;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;
@@ -588,6 +654,7 @@ void loop(){
  }
  if(dirty&&inGame&&esp_lv_adapter_lock(1000)==ESP_OK){
   drawBoard();
+  showEndModal();
   esp_lv_adapter_unlock();
  }
  if(inGame&&!modeOverlay&&awaitingAI){
@@ -599,7 +666,7 @@ void loop(){
    resolveSpyMove(best);
   }else strcpy(lastText,"Computer could not find a move");
   awaitingAI=false;selected=-1;refreshLegal();
-  if(esp_lv_adapter_lock(-1)==ESP_OK){drawBoard();esp_lv_adapter_unlock();}
+  if(esp_lv_adapter_lock(-1)==ESP_OK){drawBoard();showEndModal();esp_lv_adapter_unlock();}
  }
  delay(12);
 }
