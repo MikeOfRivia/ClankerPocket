@@ -224,7 +224,13 @@ static void createUI(){
  lv_obj_set_pos(title,476,17);
  for(int i=0;i<64;i++){
   int r=i/8,c=i%8;
-  cells[i]=lv_button_create(screen);
+  // A plain clickable cell avoids LVGL button press recolor styles that
+  // propagate into child sprites and lock up software rendering on touch.
+  cells[i]=lv_obj_create(screen);
+  lv_obj_add_flag(cells[i],LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_remove_flag(cells[i],LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(cells[i],LV_OPA_COVER,0);
+  lv_obj_set_style_image_recolor_opa(cells[i],LV_OPA_TRANSP,0);
   lv_obj_set_pos(cells[i],22+c*54,22+r*54);
   lv_obj_set_size(cells[i],54,54);
   lv_obj_set_style_radius(cells[i],0,0);
