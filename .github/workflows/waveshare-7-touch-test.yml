@@ -36,6 +36,8 @@ jobs:
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
           # Non-Xtensa optimized assembly backends aren't needed by the demo.
           find deps/lvgl -name '*.S' -type f -delete
+          # Arduino only adds lvgl/src to its include/build search path.
+          cp -a deps/lvgl/demos deps/lvgl/src/demos
           cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
           sed -i 's/^#if 0 \/\* Set this to "1" to enable content \*\//#if 1 \/\* Set this to "1" to enable content \*\//' deps/lv_conf.h
           sed -i -E 's/^([[:space:]]*)#define LV_USE_DEMO_WIDGETS[[:space:]]+0/\1#define LV_USE_DEMO_WIDGETS 1/' deps/lv_conf.h
