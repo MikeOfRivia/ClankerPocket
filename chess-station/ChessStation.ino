@@ -235,7 +235,7 @@ void loop(){
  }
  if(dirty){
   Serial.println("Chess: redraw start");
-  if(esp_lv_adapter_lock(1000)){drawBoard();esp_lv_adapter_unlock();Serial.println("Chess: redraw done");}
+  if(esp_lv_adapter_lock(1000) == ESP_OK){drawBoard();esp_lv_adapter_unlock();Serial.println("Chess: redraw done");}
   else Serial.println("Chess: LVGL lock timeout");
  }
  if(awaitingAI){
@@ -246,7 +246,7 @@ void loop(){
    moveText(best,true);
   }else strcpy(lastText,"Computer could not find a move");
   awaitingAI=false;selected=-1;refreshLegal();
-  if(esp_lv_adapter_lock(-1)){drawBoard();esp_lv_adapter_unlock();}
+  if(esp_lv_adapter_lock(-1) == ESP_OK){drawBoard();esp_lv_adapter_unlock();}
  }
  delay(12);
 }
