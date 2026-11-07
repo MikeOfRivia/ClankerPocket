@@ -233,6 +233,11 @@ static void createUI(){
   lv_obj_set_style_pad_all(cells[i],0,0);
   lv_obj_add_event_cb(cells[i],boardPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)(((r<<4)|c)));
   pieces[i]=lv_image_create(cells[i]);
+  // The LVGL style inherited from the button activates image recoloring.
+  // Recoloring a whole sprite triggers slow software pixel processing and WDT.
+  // Our sprites already contain their final colors; disable recoloring.
+  lv_obj_set_style_image_recolor_opa(pieces[i],LV_OPA_TRANSP,LV_PART_MAIN);
+  lv_obj_set_style_image_opa(pieces[i],LV_OPA_COVER,LV_PART_MAIN);
   lv_obj_set_size(pieces[i],44,44);
   lv_obj_center(pieces[i]);
   lv_obj_remove_flag(pieces[i],LV_OBJ_FLAG_CLICKABLE);
