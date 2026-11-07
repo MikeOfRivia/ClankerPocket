@@ -77,11 +77,12 @@ jobs:
           ADDR2LINE=$(find "$HOME/.arduino15/packages/esp32" -name 'xtensa-esp32s3-elf-addr2line' -type f | head -1)
           test -n "$ADDR2LINE"
           "$ADDR2LINE" -pfiaC -e build/ChessStation.ino.elf \
-            0x42014b99 0x42015275 0x4202582d 0x420219e6 0x420134cb \
-            0x42013510 0x42013585 0x42014a83 0x4203955e 0x42065d8d \
-            0x4200d44f 0x4200d552 0x42011e1b 0x42011a5b 0x42011ec2 \
-            0x42011a5b 0x420120b6 0x420121b9 0x4201225c 0x4201290d \
-            0x4202f96e 0x4200247c 0x4037c46d
+            0x4202492d 0x42014251 0x4201483d 0x4202538b 0x420219ce \
+            0x4201342b 0x42013470 0x420134e5 0x42014667 0x42038c82 \
+            0x42065ced 0x4200d3af 0x4200d4b2 0x42011d7b 0x420119bb \
+            0x42011e22 0x420119bb 0x42011e22 0x420119bb 0x42012016 \
+            0x42012119 0x420121bc 0x4201286d 0x4202f8ce 0x420023dc \
+            0x4037c46d
 
       - name: Merge and package COM3 firmware
         shell: bash
