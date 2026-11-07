@@ -50,6 +50,7 @@ jobs:
           Path('sketch/ShapeSiege/ShapeSiege.ino').write_bytes(source)
           print('Restored original Shape Siege source, SHA256', sha)
           PY
+          python3 shape-siege/speed-patch.py
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
           find deps/lvgl -name '*.S' -type f -delete
           cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
@@ -79,7 +80,7 @@ jobs:
             0x8000 firmware/ShapeSiege.ino.partitions.bin \
             0x10000 firmware/ShapeSiege.ino.bin
           cat > firmware/flash.ps1 <<'PS1'
-          param([string]$Port = 'COM6')
+          param([string]$Port = 'COM3')
           $ErrorActionPreference = 'Stop'
           Set-Location $PSScriptRoot
           py -m esptool --chip esp32s3 --port $Port --baud 460800 write-flash 0x0 .\shape-siege-full.bin
@@ -91,18 +92,18 @@ jobs:
           1. Extract this artifact ZIP.
           2. Open PowerShell in that folder.
           3. Run: Set-ExecutionPolicy -Scope Process Bypass -Force
-          4. Run: .\flash.ps1 -Port COM6
+          4. Run: .\flash.ps1 -Port COM3
           5. Press RESET after flashing.
 
           No Arduino or Git needed on Windows.
           This FULL firmware image replaces the Waveshare touchscreen test.
-          It is the original 50-wave, 3-map Shape Siege game source.
+          50 waves, 3 maps. Default speed: 4x. Tap SPEED to cycle 1x / 2x / 4x.
           EOF
 
       - name: Upload ready-to-flash Shape Siege
         uses: actions/upload-artifact@v4
         with:
-          name: ShapeSiege-COM6-Flash
+          name: ShapeSiege-4X-COM3-Flash
           path: |
             firmware/shape-siege-full.bin
             firmware/flash.ps1
