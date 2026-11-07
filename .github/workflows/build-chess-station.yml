@@ -42,6 +42,15 @@ jobs:
           cp chess-station/ChessStation.ino sketch/ChessStation/ChessStation.ino
           git clone --depth 1 https://github.com/Gissio/mcu-max.git engine
           cp engine/src/mcu-max.c engine/src/mcu-max.h sketch/ChessStation/
+          # Embed only the 12 chess symbols, avoiding a full Unicode font in firmware.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-dejavu-core
+          npm install --global lv_font_conv@1.5.3
+          lv_font_conv --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --range 0x2654-0x265F --size 42 --bpp 4 \
+            --format lvgl --lv-font-name chess_pieces_42 \
+            --output sketch/ChessStation/chess_pieces_42.c
+          grep -q 'chess_pieces_42' sketch/ChessStation/chess_pieces_42.c
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
           find deps/lvgl -name '*.S' -type f -delete
           cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
@@ -87,7 +96,8 @@ jobs:
             .\flash.ps1 -Port COM3
           Press RESET after flashing.
           Includes mcu-max chess engine (MIT license).
-          Onboard AI, two-player mode, 5 difficulty levels, undo, legal moves.
+          Onboard AI, two-player mode, 4 difficulty levels, undo, legal moves.
+          Chess glyphs, blue legal-move dots, red capture highlights.
           MVP limitation: engine defaults to queen promotion (no underpromotion).
           No local compilation required.
           EOF
