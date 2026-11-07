@@ -43,30 +43,53 @@ for name in names:
         f'.data_size = sizeof({name}), .data = {name} }},'
     )
 chunks.append('};')
-# Draw an original branded chess crest (not a text-only menu heading).
-# Opaque RGB565 keeps flash use low and avoids expensive alpha blending.
-from PIL import ImageFilter
-W,H=440,238
-logo=Image.new("RGB",(W,H),(17,28,42))
+# Dedicated 380x440 RGB565 home emblem: 4 knights, 2 adults + 2 children.
+# Artwork is drawn at build time, not loaded or decoded at runtime.
+W,H=380,440
+dark=(17,28,42)
+gold=(224,179,99)
+ivory=(248,237,210)
+bronze=(138,100,57)
+logo=Image.new("RGB",(W,H),dark)
 d=ImageDraw.Draw(logo)
-gold=(224,179,99); pale=(247,222,166); muted=(117,91,58)
-# Gold double-lined shield, with a subtle checker field.
-outline=[(W//2,10),(W//2+65,31),(W//2+65,106),(W//2+47,139),(W//2,167),(W//2-47,139),(W//2-65,106),(W//2-65,31)]
-d.line(outline+[outline[0]],fill=gold,width=4,joint="curve")
-inner=[(W//2,17),(W//2+58,37),(W//2+58,103),(W//2+42,134),(W//2,158),(W//2-42,134),(W//2-58,103),(W//2-58,37)]
-d.line(inner+[inner[0]],fill=muted,width=2,joint="curve")
-for yy in range(40,116,19):
-    for xx in range(W//2-48,W//2+49,19):
-        if ((xx-(W//2-48))//19+(yy-40)//19)%2==0:
-            d.rectangle((xx,yy,xx+18,yy+18),fill=(36,49,58))
-knight=ImageFont.truetype(font_file,112)
-d.text((W//2,81),"♞",font=knight,anchor="mm",fill=pale,stroke_width=2,stroke_fill=(99,67,37))
-serif=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",38)
-small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",21)
-d.text((W//2,187),"CHESS",font=serif,anchor="mm",fill=pale,stroke_width=1,stroke_fill=muted)
-d.text((W//2,220),"S T A T I O N",font=small,anchor="mm",fill=gold)
-d.line((60,195,133,195),fill=gold,width=2)
-d.line((307,195,380,195),fill=gold,width=2)
+
+# A restrained gilded frame, checker accents and family crest.
+d.rounded_rectangle((12,15,W-12,H-15),radius=22,outline=(116,88,52),width=3)
+d.rounded_rectangle((19,22,W-19,H-22),radius=18,outline=(67,60,49),width=1)
+for xx in range(36,W-36,20):
+    d.rectangle((xx,37,xx+9,46),fill=(55,55,51) if (xx//20)%2 else (74,61,46))
+d.line((45,302,W-45,302),fill=gold,width=2)
+
+# Four original family knight emblems: large parents, small children.
+def draw_knight(cx,cy,px,fill,stroke):
+    f=ImageFont.truetype(font_file,px)
+    d.text((cx,cy),"♞",font=f,anchor="mm",fill=fill,
+           stroke_width=2 if px>105 else 1,stroke_fill=stroke)
+    # Gold plinth under each piece, proportionate to its size
+    radius=max(18,px//4)
+    by=cy+px//3
+    d.line((cx-radius,by,cx+radius,by),fill=gold,width=3)
+
+draw_knight(138,166,143,ivory,bronze)
+draw_knight(240,166,143,(233,200,140),(110,75,40))
+draw_knight(64,228,89,(245,229,196),bronze)
+draw_knight(317,228,89,(245,229,196),bronze)
+
+def fit_font(text,max_width,start_size,min_size=12):
+    for n in range(start_size,min_size-1,-1):
+        f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",n)
+        if d.textbbox((0,0),text,font=f)[2]<=max_width:
+            return f
+    return f
+
+d.text((W//2,328),"THE",font=fit_font("THE",W-55,19),anchor="mm",fill=gold)
+d.text((W//2,359),"KNIGHT FAMILY",
+       font=fit_font("KNIGHT FAMILY",W-45,30),anchor="mm",fill=ivory,
+       stroke_width=1,stroke_fill=bronze)
+d.text((W//2,398),"CHESS EXPERIENCE",
+       font=fit_font("CHESS EXPERIENCE",W-62,20),anchor="mm",fill=gold)
+d.line((33,397,60,397),fill=gold,width=2)
+d.line((W-60,397,W-33,397),fill=gold,width=2)
 buf=bytearray()
 for red,green,blue in logo.getdata():
     c=((red>>3)<<11)|((green>>2)<<5)|(blue>>3)
