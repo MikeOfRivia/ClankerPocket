@@ -177,17 +177,17 @@ static void drawBoard(){
    renderedPiece[i]=p;
   }
   const bool dark=(((i>>3)+(i&7))&1);
-  uint32_t bg=dark?0x6B6255:0xEAE0CA;
+  uint32_t bg=dark?0x526858:0xA5B9A5;
   // Subtle last-move markers on BOTH origin and destination, including the
   // computer's reply. Derived from history so Undo and New Game stay correct.
   if(historyCount>0){
    const mcumax_move last=history[historyCount-1];
-   if(sq==last.from||sq==last.to)bg=dark?0x94804F:0xE8CD87;
+   if(sq==last.from||sq==last.to)bg=dark?0x6D9874:0xC0D9B9;
   }
   // Capture squares are red, but the selected piece remains gold.
   const bool legalTarget=selected>=0&&canMove((uint8_t)selected,sq);
   const bool capture=legalTarget&&((p&7)!=MCUMAX_EMPTY);
-  if(selected==(int)sq)bg=0xE6B448;
+  if(selected==(int)sq)bg=0x58DF7A;
   else if(capture)bg=0xBE4950;
   // Check highlights only the king. Checkmate highlights a full 3x3
   // cluster around the mated king (clipped at the board edges).
@@ -233,13 +233,18 @@ static void actionPressed(lv_event_t *e){
 static lv_obj_t *newButton(lv_obj_t *parent,int x,int y,int w,int h,const char *caption,int action){
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);
- lv_obj_set_style_radius(b,8,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x182333),0);
- lv_obj_set_style_border_color(b,lv_color_hex(0xD8AF62),0);
+ lv_obj_set_style_radius(b,3,0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x0B2417),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(0x56FF73),0);
  lv_obj_set_style_border_width(b,2,0);
- lv_obj_set_style_text_color(b,lv_color_hex(0xF8EED7),0);
+ lv_obj_set_style_shadow_width(b,0,0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x17552D),LV_STATE_PRESSED);
+ lv_obj_set_style_text_color(b,lv_color_hex(0x98FFAA),0);
  lv_obj_add_event_cb(b,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
- lv_obj_t *l=lv_label_create(b);lv_label_set_text(l,caption);lv_obj_center(l);
+ lv_obj_t *l=lv_label_create(b);
+ lv_label_set_text(l,caption);
+ lv_obj_set_style_text_color(l,lv_color_hex(0xA8FFB9),0);
+ lv_obj_center(l);
  return b;
 }
 
@@ -252,10 +257,12 @@ static void closeModeModal(){
 static lv_obj_t *rotatedButton(lv_obj_t *parent,int x,int y,int graphic,int action){
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,66,182);
- lv_obj_set_style_radius(b,9,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x182333),0);
- lv_obj_set_style_border_color(b,lv_color_hex(0xD8AF62),0);
+ lv_obj_set_style_radius(b,3,0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x0B2417),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(0x56FF73),0);
  lv_obj_set_style_border_width(b,2,0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x17552D),LV_STATE_PRESSED);
+ lv_obj_set_style_shadow_width(b,0,0);
  lv_obj_add_event_cb(b,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
  lv_obj_t *label=lv_image_create(b);
  lv_image_set_src(label,&chess_rotated_buttons[graphic]);
@@ -272,22 +279,23 @@ static void openSelectionModal(){
  lv_obj_set_style_radius(modeOverlay,0,0);
  lv_obj_set_style_pad_all(modeOverlay,0,0);
  lv_obj_set_style_border_width(modeOverlay,0,0);
- lv_obj_set_style_bg_color(modeOverlay,lv_color_hex(0x0A111B),0);
+ lv_obj_set_style_bg_color(modeOverlay,lv_color_hex(0x020805),0);
  lv_obj_set_style_bg_opa(modeOverlay,LV_OPA_90,0);
  lv_obj_add_flag(modeOverlay,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_remove_flag(modeOverlay,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *panel=lv_obj_create(modeOverlay);
  lv_obj_set_pos(panel,206,16);
  lv_obj_set_size(panel,388,448);
- lv_obj_set_style_radius(panel,16,0);
- lv_obj_set_style_bg_color(panel,lv_color_hex(0x182637),0);
- lv_obj_set_style_border_color(panel,lv_color_hex(0xCDA45C),0);
+ lv_obj_set_style_radius(panel,5,0);
+ lv_obj_set_style_bg_color(panel,lv_color_hex(0x071A10),0);
+ lv_obj_set_style_border_color(panel,lv_color_hex(0x56FF73),0);
  lv_obj_set_style_border_width(panel,2,0);
+ lv_obj_set_style_shadow_width(panel,0,0);
  lv_obj_set_style_pad_all(panel,0,0);
  lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *title=lv_label_create(panel);
  lv_label_set_text(title,vsAI?"CHOOSE DIFFICULTY":"CHOOSE GAME MODE");
- lv_obj_set_style_text_color(title,lv_color_hex(0xF4D58C),0);
+ lv_obj_set_style_text_color(title,lv_color_hex(0xA8FFB9),0);
  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,18);
  if(vsAI){
@@ -311,7 +319,7 @@ static void createGameUI(){
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
  for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;renderedDot[i]=255;}
  screen=lv_screen_active();
- lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
  lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  if(!vsAI){
   // Labels are pre-rotated 90 degrees clockwise for White's viewpoint.
@@ -322,6 +330,18 @@ static void createGameUI(){
   newButton(screen,34,256,268,66,"MAIN MENU",7);
  }
 
+ // Fixed thin neon perimeter. One inert backing object, no animations.
+ lv_obj_t *boardFrame=lv_obj_create(screen);
+ lv_obj_set_pos(boardFrame,vsAI?342:180,vsAI?18:20);
+ lv_obj_set_size(boardFrame,440,440);
+ lv_obj_set_style_radius(boardFrame,2,0);
+ lv_obj_set_style_pad_all(boardFrame,0,0);
+ lv_obj_set_style_bg_opa(boardFrame,LV_OPA_TRANSP,0);
+ lv_obj_set_style_border_width(boardFrame,2,0);
+ lv_obj_set_style_border_color(boardFrame,lv_color_hex(0x26984B),0);
+ lv_obj_set_style_shadow_width(boardFrame,0,0);
+ lv_obj_remove_flag(boardFrame,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_remove_flag(boardFrame,LV_OBJ_FLAG_SCROLLABLE);
  // Every mode needs a full set of board objects before drawBoard().
  for(int i=0;i<64;i++){
   int r=i/8,c=i%8;
@@ -357,7 +377,7 @@ static void createGameUI(){
   moveDots[i]=lv_obj_create(cells[i]);
   lv_obj_set_size(moveDots[i],16,16);
   lv_obj_set_style_radius(moveDots[i],LV_RADIUS_CIRCLE,0);
-  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0xD2A649),0);
+  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0x27FB64),0);
   lv_obj_set_style_bg_opa(moveDots[i],LV_OPA_COVER,0);
   lv_obj_set_style_border_width(moveDots[i],0,0);
   lv_obj_set_style_shadow_width(moveDots[i],0,0);
@@ -381,7 +401,7 @@ static void createGameUI(){
    lv_obj_set_style_border_side(turnFrame[side],(lv_border_side_t)(side==0?
        (LV_BORDER_SIDE_LEFT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM):
        (LV_BORDER_SIDE_RIGHT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM)),0);
-   lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0xFFD348),0);
+   lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0x56FF73),0);
    lv_obj_set_style_shadow_width(turnFrame[side],0,0);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_CLICKABLE);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_SCROLLABLE);
@@ -397,13 +417,20 @@ static void createHome(){
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
- lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
  lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *brand=lv_image_create(screen);
  lv_image_set_src(brand,&chess_logo);
  lv_obj_set_style_image_recolor_opa(brand,LV_OPA_TRANSP,0);
  lv_obj_set_pos(brand,10,20);
  lv_obj_remove_flag(brand,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_t *divider=lv_obj_create(screen);
+ lv_obj_set_pos(divider,415,60);lv_obj_set_size(divider,2,360);
+ lv_obj_set_style_bg_color(divider,lv_color_hex(0x164A29),0);
+ lv_obj_set_style_border_width(divider,0,0);
+ lv_obj_set_style_radius(divider,0,0);
+ lv_obj_set_style_pad_all(divider,0,0);
+ lv_obj_remove_flag(divider,LV_OBJ_FLAG_CLICKABLE);
  newButton(screen,466,160,276,72,"1 PLAYER",5);
  newButton(screen,466,275,276,72,"2 PLAYERS",6);
 }
