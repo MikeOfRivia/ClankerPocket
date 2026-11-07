@@ -291,10 +291,10 @@ static void openSelectionModal(){
  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,18);
  if(vsAI){
-  newButton(panel,48,65,292,55,"1  BEGINNER",15);
-  newButton(panel,48,128,292,55,"2  NOVICE",16);
-  newButton(panel,48,191,292,55,"3  INTERMEDIATE",17);
-  newButton(panel,48,254,292,55,"4  MAX ENGINE",18);
+  newButton(panel,48,65,292,55,"BEGINNER",15);
+  newButton(panel,48,128,292,55,"NOVICE",16);
+  newButton(panel,48,191,292,55,"INTERMEDIATE",17);
+  newButton(panel,48,254,292,55,"MAX ENGINE",18);
  }else{
   newButton(panel,48,80,292,62,"STANDARD",11);
   newButton(panel,48,155,292,62,"KNIGHTS ONLY",12);
