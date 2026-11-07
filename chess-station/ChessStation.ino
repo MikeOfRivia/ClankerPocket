@@ -22,7 +22,6 @@ static int historyCount=0;
 static char lastText[56]="Tap a piece to begin";
 static const uint32_t limits[]={350,1500,6000,18000,45000};
 static const uint8_t depths[]={2,3,4,5,6};
-static const lv_color_t unusedColor={};
 
 static bool sameMove(mcumax_move a,mcumax_move b){return a.from==b.from&&a.to==b.to;}
 static bool hasFrom(uint8_t sq){for(uint32_t i=0;i<validCount&&i<256;i++)if(validMoves[i].from==sq)return true;return false;}
@@ -53,13 +52,13 @@ static void moveText(mcumax_move m,bool ai){
 }
 
 static void drawBoard(){
- const bool blackToMove=(mcumax_get_current_side()==MCUMAX_BLACK);
+ const bool blackToMove=(mcumax_get_current_side()==0x10);
  for(int i=0;i<64;i++){
   uint8_t sq=((i>>3)<<4)|(i&7);
   mcumax_piece p=mcumax_get_piece(sq);
   char letter=pieceLetter(p);
   char t[2]={letter,0};
-  lv_label_set_text(pieces[i],letter?t:"");
+  lv_label_set_text(pieces[i],letter?t:"");lv_obj_center(pieces[i]);
   lv_obj_set_style_text_color(pieces[i],(p&MCUMAX_BLACK)?lv_color_hex(0x16181F):lv_color_hex(0xFFFFFF),0);
   const bool dark=(((i>>3)+(i&7))&1);
   uint32_t bg=dark?0x71926F:0xE9E3C9;
@@ -154,9 +153,9 @@ static void undoMove(){
  refreshLegal();
 }
 static void squareClicked(uint8_t sq){
- if(gameOver||awaitingAI||(vsAI&&mcumax_get_current_side()==MCUMAX_BLACK))return;
+ if(gameOver||awaitingAI||(vsAI&&mcumax_get_current_side()==0x10))return;
  mcumax_piece p=mcumax_get_piece(sq);
- bool own=pieceLetter(p)&&((p&MCUMAX_BLACK)==mcumax_get_current_side());
+ bool own=pieceLetter(p)&&((p&MCUMAX_BLACK)==(mcumax_get_current_side()==0x10?MCUMAX_BLACK:0));
  if(selected>=0&&canMove((uint8_t)selected,sq)){
   mcumax_move m={(uint8_t)selected,sq};
   if(mcumax_play_move(m)){
