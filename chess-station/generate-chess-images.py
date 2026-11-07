@@ -31,7 +31,7 @@ for i, symbol in enumerate(symbols):
         chunks.append('  ' + ', '.join(f'0x{v:02x}' for v in pixels[j:j+32]) + ',')
     chunks.append('};')
     chunks.append('')
-chunks.append('const lv_image_dsc_t chess_piece_images[12] = {')
+chunks.append('extern const lv_image_dsc_t chess_piece_images[12] = {')
 for name in names:
     chunks.append(
         '  { .header = { .magic = LV_IMAGE_HEADER_MAGIC, .cf = LV_COLOR_FORMAT_ARGB8888, '
