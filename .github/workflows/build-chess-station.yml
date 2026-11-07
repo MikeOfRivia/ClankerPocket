@@ -70,6 +70,20 @@ jobs:
             --output-dir "$PWD/firmware" \
             sketch/ChessStation
 
+      - name: Decode graphics watchdog backtrace
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find "$HOME/.arduino15/packages/esp32" -name '*addr2line' -type f
+          ADDR2LINE=$(find "$HOME/.arduino15/packages/esp32" -name 'xtensa-esp32s3-elf-addr2line' -type f | head -1)
+          test -n "$ADDR2LINE"
+          "$ADDR2LINE" -pfiaC -e build/ChessStation.ino.elf \
+            0x42014b99 0x42015275 0x4202582d 0x420219e6 0x420134cb \
+            0x42013510 0x42013585 0x42014a83 0x4203955e 0x42065d8d \
+            0x4200d44f 0x4200d552 0x42011e1b 0x42011a5b 0x42011ec2 \
+            0x42011a5b 0x420120b6 0x420121b9 0x4201225c 0x4201290d \
+            0x4202f96e 0x4200247c 0x4037c46d
+
       - name: Merge and package COM3 firmware
         shell: bash
         run: |
