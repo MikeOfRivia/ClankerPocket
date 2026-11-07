@@ -8,7 +8,7 @@
 using namespace esp_panel::drivers;
 using namespace esp_panel::board;
 
-static lv_obj_t *cells[64], *pieces[64], *statusLabel, *modeLabel, *levelLabel, *lastLabel;
+static lv_obj_t *cells[64], *pieces[64], *moveDots[64], *statusLabel, *modeLabel, *levelLabel, *lastLabel;
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
@@ -22,6 +22,8 @@ static int historyCount=0;
 static char lastText[56]="Tap a piece to begin";
 static uint8_t renderedPiece[64];
 static uint32_t renderedColor[64];
+static uint8_t renderedDot[64];
+LV_FONT_DECLARE(chess_pieces_42);
 // Level 1-3 are deliberately weakened: shallow search alone is still very
 // unforgiving at beginner ratings. No Elo claim without actual calibration.
 // Level 4 retains the strongest search budget from the previous 5-level build.
@@ -74,6 +76,19 @@ static char pieceLetter(mcumax_piece p){
   case MCUMAX_QUEEN:return 'Q';
   case MCUMAX_KING:return 'K';
   default:return '\0';
+ }
+}
+// Unicode chess symbols. Generated glyph font is embedded in the firmware.
+static const char *pieceSymbol(mcumax_piece p){
+ const bool black=(p&MCUMAX_BLACK)!=0;
+ switch(p&7){
+  case MCUMAX_KING:return black?"♚":"♔";
+  case MCUMAX_QUEEN:return black?"♛":"♕";
+  case MCUMAX_ROOK:return black?"♜":"♖";
+  case MCUMAX_BISHOP:return black?"♝":"♗";
+  case MCUMAX_KNIGHT:return black?"♞":"♘";
+  case MCUMAX_PAWN_UPSTREAM: case MCUMAX_PAWN_DOWNSTREAM:return black?"♟":"♙";
+  default:return "";
  }
 }
 static void squareName(uint8_t s,char out[3]){
@@ -139,22 +154,30 @@ static void drawBoard(){
  for(int i=0;i<64;i++){
   uint8_t sq=((i>>3)<<4)|(i&7);
   mcumax_piece p=mcumax_get_piece(sq);
-  char letter=pieceLetter(p);
-  char t[2]={letter,0};
+
   // Only touch LVGL objects that actually changed. Rebuilding 64 labels and
   // restyling 64 buttons for a single selection caused excessive redraw work.
   if(renderedPiece[i]!=p){
-   lv_label_set_text(pieces[i],letter?t:"");
+   lv_label_set_text(pieces[i],pieceSymbol(p));
    lv_obj_center(pieces[i]);
    lv_obj_set_style_text_color(pieces[i],(p&MCUMAX_BLACK)?lv_color_hex(0x16181F):lv_color_hex(0xFFFFFF),0);
    renderedPiece[i]=p;
   }
   const bool dark=(((i>>3)+(i&7))&1);
   uint32_t bg=dark?0x71926F:0xE9E3C9;
+  // Capture squares are red, but the selected piece remains gold.
+  const bool legalTarget=selected>=0&&canMove((uint8_t)selected,sq);
+  const bool capture=legalTarget&&((p&7)!=MCUMAX_EMPTY);
   if(selected==(int)sq)bg=0xE6B448;
-  else if(selected>=0&&canMove((uint8_t)selected,sq))bg=0x93B5CD;
+  else if(capture)bg=0xBE4950;
   // Check takes visual priority over selection and move markers.
   if(sq==checkedKing)bg=0xDC343F;
+  const bool dot=legalTarget&&!capture&&sq!=checkedKing;
+  if(renderedDot[i]!=(uint8_t)dot){
+   if(dot)lv_obj_remove_flag(moveDots[i],LV_OBJ_FLAG_HIDDEN);
+   else lv_obj_add_flag(moveDots[i],LV_OBJ_FLAG_HIDDEN);
+   renderedDot[i]=(uint8_t)dot;
+  }
   if(renderedColor[i]!=bg){
    lv_obj_set_style_bg_color(cells[i],lv_color_hex(bg),0);
    renderedColor[i]=bg;
@@ -186,7 +209,7 @@ static lv_obj_t *newButton(lv_obj_t *parent,int x,int y,int w,int h,const char *
 }
 
 static void createUI(){
- for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;}
+ for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;renderedDot[i]=255;}
  screen=lv_screen_active();
  lv_obj_set_style_bg_color(screen,lv_color_hex(0x111C2A),0);
  lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
@@ -206,8 +229,19 @@ static void createUI(){
   lv_obj_set_style_pad_all(cells[i],0,0);
   lv_obj_add_event_cb(cells[i],boardPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)(((r<<4)|c)));
   pieces[i]=lv_label_create(cells[i]);
-  lv_obj_set_style_text_font(pieces[i],&lv_font_montserrat_28,0);
+  lv_obj_set_style_text_font(pieces[i],&chess_pieces_42,0);
   lv_obj_center(pieces[i]);
+  moveDots[i]=lv_obj_create(cells[i]);
+  lv_obj_set_size(moveDots[i],16,16);
+  lv_obj_set_style_radius(moveDots[i],LV_RADIUS_CIRCLE,0);
+  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0x2874BA),0);
+  lv_obj_set_style_bg_opa(moveDots[i],LV_OPA_COVER,0);
+  lv_obj_set_style_border_width(moveDots[i],0,0);
+  lv_obj_set_style_shadow_width(moveDots[i],0,0);
+  lv_obj_set_style_pad_all(moveDots[i],0,0);
+  lv_obj_center(moveDots[i]);
+  lv_obj_remove_flag(moveDots[i],LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(moveDots[i],LV_OBJ_FLAG_HIDDEN);
  }
  statusLabel=lv_label_create(screen);
  lv_obj_set_style_text_color(statusLabel,lv_color_hex(0xC3D6EC),0);
