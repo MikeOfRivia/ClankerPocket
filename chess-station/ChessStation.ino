@@ -74,6 +74,10 @@ static void resolveSpyMove(mcumax_move m){
   winnerSide=moverBlack?1:0;
   return;
  }
+ // Checkmate is a draw in Spy Kings. Do not count a mating check as
+ // the third exposure, otherwise the two end conditions would conflict.
+ // mcu-max supplies the legal reply count for the side now to move.
+ if(mcumax_search_valid_moves(validMoves,256)==0)return;
  // Count one exposure for each legal move that gives check.
  if(checkedKingSquare()>=0){
   const int exposed=(mcumax_get_current_side()==0x10)?1:0;
