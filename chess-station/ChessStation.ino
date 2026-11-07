@@ -169,6 +169,12 @@ static void drawBoard(){
   }
   const bool dark=(((i>>3)+(i&7))&1);
   uint32_t bg=dark?0x71926F:0xE9E3C9;
+  // Subtle last-move markers on BOTH origin and destination, including the
+  // computer's reply. Derived from history so Undo and New Game stay correct.
+  if(historyCount>0){
+   const mcumax_move last=history[historyCount-1];
+   if(sq==last.from||sq==last.to)bg=dark?0x8C9965:0xD1CA82;
+  }
   // Capture squares are red, but the selected piece remains gold.
   const bool legalTarget=selected>=0&&canMove((uint8_t)selected,sq);
   const bool capture=legalTarget&&((p&7)!=MCUMAX_EMPTY);
