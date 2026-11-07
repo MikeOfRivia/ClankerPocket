@@ -80,6 +80,27 @@ chunks.append('  .header = { .magic = LV_IMAGE_HEADER_MAGIC, .cf = LV_COLOR_FORM
 chunks.append(f'    .w = {W}, .h = {H}, .stride = {W*2} }},')
 chunks.append('  .data_size = sizeof(logo_pixels), .data = logo_pixels,')
 chunks.append('};')
+# Pre-render 90-degree-clockwise 2P labels rather than rotating LVGL text
+# dynamically. Avoids software-renderer transform overhead on this device.
+button_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 23)
+button_names = ["NEW GAME", "MAIN MENU"]
+for i,caption in enumerate(button_names):
+    label = Image.new("RGBA",(170,54),(0,0,0,0))
+    ld=ImageDraw.Draw(label)
+    ld.text((85,27),caption,font=button_font,anchor="mm",fill=(250,245,232,255))
+    rotated = label.rotate(270,expand=True)  # 90 degrees clockwise
+    raw = bytearray()
+    for red,green,blue,alpha in rotated.getdata():
+        raw.extend((blue,green,red,alpha))
+    chunks.append(f'static const uint8_t rotated_button_{i}[{len(raw)}] = {{')
+    for k in range(0,len(raw),32):
+        chunks.append('  '+', '.join(f'0x{v:02x}' for v in raw[k:k+32])+',')
+    chunks.append('};')
+chunks.append('extern const lv_image_dsc_t chess_rotated_buttons[2] = {')
+for i in range(2):
+    chunks.append('  { .header = { .magic = LV_IMAGE_HEADER_MAGIC, .cf = LV_COLOR_FORMAT_ARGB8888, .w = 54, .h = 170, .stride = 216 }, '
+                  f'.data_size = sizeof(rotated_button_{i}), .data = rotated_button_{i} }},')
+chunks.append('};')
 with open(target, 'w', encoding='utf-8') as fh:
     fh.write('\n'.join(chunks) + '\n')
 print(f'Generated {len(names)} chess sprites ({size}x{size}).')
