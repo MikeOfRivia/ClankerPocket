@@ -1,0 +1,105 @@
+name: Build Chess Station — Waveshare 7-inch
+
+on:
+  push:
+    branches: [waveshare-chess-mcumax]
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out Chess Station
+        uses: actions/checkout@v4
+        with:
+          ref: waveshare-chess-mcumax
+
+      - name: Install Arduino CLI and ESP32 board support
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s 1.5.1
+          echo "$PWD/bin" >> "$GITHUB_PATH"
+          ./bin/arduino-cli config init --overwrite
+          ./bin/arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          ./bin/arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Restore Waveshare touch stack and chess engine
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/waveshareteam/ESP32-S3-Touch-LCD-7.git upstream
+          cd upstream
+          git sparse-checkout set examples/Arduino/examples/10_lvgl_v9_demo examples/Arduino/libraries/ESP32_Display_Panel examples/Arduino/libraries/ESP32_IO_Expander examples/Arduino/libraries/esp-lib-utils
+          cd ..
+          mkdir -p deps sketch/ChessStation
+          cp -a upstream/examples/Arduino/libraries/ESP32_Display_Panel deps/
+          cp -a upstream/examples/Arduino/libraries/ESP32_IO_Expander deps/
+          cp -a upstream/examples/Arduino/libraries/esp-lib-utils deps/
+          for f in esp_lv_adapter_arduino.cpp esp_lv_adapter_arduino.h esp_panel_board_custom_conf.h; do
+            cp "upstream/examples/Arduino/examples/10_lvgl_v9_demo/$f" sketch/ChessStation/
+          done
+          cp chess-station/ChessStation.ino sketch/ChessStation/ChessStation.ino
+          git clone --depth 1 https://github.com/Gissio/mcu-max.git engine
+          cp engine/src/mcu-max.c engine/src/mcu-max.h sketch/ChessStation/
+          git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
+          find deps/lvgl -name '*.S' -type f -delete
+          cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
+          sed -i 's/^#if 0 \/\* Set this to "1" to enable content \*\//#if 1 \/\* Set this to "1" to enable content \*\//' deps/lv_conf.h
+          sed -i 's/^#define LV_FONT_MONTSERRAT_24 0/#define LV_FONT_MONTSERRAT_24 1/' deps/lv_conf.h
+          sed -i 's/^#define LV_FONT_MONTSERRAT_28 0/#define LV_FONT_MONTSERRAT_28 1/' deps/lv_conf.h
+          grep -q '^#define ESP_OPEN_TOUCH 1' sketch/ChessStation/esp_panel_board_custom_conf.h
+
+      - name: Compile Chess Station
+        shell: bash
+        run: |
+          set -euxo pipefail
+          arduino-cli compile \
+            --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=default,PSRAM=opi,LoopCore=0' \
+            --libraries "$PWD/deps" \
+            --build-path "$PWD/build" \
+            --output-dir "$PWD/firmware" \
+            sketch/ChessStation
+
+      - name: Merge and package COM3 firmware
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m pip install --user 'esptool==5.3.1'
+          python3 -m esptool --chip esp32s3 merge-bin \
+            -o firmware/chess-station-full.bin \
+            --flash-mode dio --flash-freq 80m --flash-size 16MB \
+            0x0 firmware/ChessStation.ino.bootloader.bin \
+            0x8000 firmware/ChessStation.ino.partitions.bin \
+            0x10000 firmware/ChessStation.ino.bin
+          cat > firmware/flash.ps1 <<'PS1'
+          param([string]$Port = 'COM3')
+          $ErrorActionPreference = 'Stop'
+          Set-Location $PSScriptRoot
+          py -m esptool --chip esp32s3 --port $Port --baud 460800 write-flash 0x0 .\chess-station-full.bin
+          if ($LASTEXITCODE -ne 0) { throw 'Flash failed. Try BOOT + RESET, then retry.' }
+          Write-Host 'Chess Station flashed. Press RESET to start.' -ForegroundColor Green
+          PS1
+          cat > firmware/README.txt <<'EOF'
+          CHESS STATION - Waveshare ESP32-S3-Touch-LCD-7 (800x480)
+          Extract this ZIP, open PowerShell in the folder, then:
+            Set-ExecutionPolicy -Scope Process Bypass -Force
+            .\flash.ps1 -Port COM3
+          Press RESET after flashing.
+          Includes mcu-max chess engine (MIT license).
+          Onboard AI, two-player mode, 5 difficulty levels, undo, legal moves.
+          MVP limitation: engine defaults to queen promotion (no underpromotion).
+          No local compilation required.
+          EOF
+          cp engine/LICENSE firmware/MCU-MAX-LICENSE.txt
+
+      - name: Upload ready-to-flash Chess Station
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChessStation-COM3-Flash
+          path: |
+            firmware/chess-station-full.bin
+            firmware/flash.ps1
+            firmware/README.txt
+            firmware/MCU-MAX-LICENSE.txt
+          if-no-files-found: error
