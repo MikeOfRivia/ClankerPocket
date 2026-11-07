@@ -202,8 +202,8 @@ static void drawBoard(){
   }
  }
  if(!vsAI){
-  // Each portrait-side player gets a thin yellow perimeter around the
-  // four ranks closest to them. Board coordinates: White=left, Black=right.
+  // Three-sided yellow turn indicator: outside edge and top/bottom only.
+  // The center seam stays clear. White=left, Black=right in framebuffer.
   const int active=blackToMove?1:0;
   if(renderedTurn!=active){
    for(int side=0;side<2;side++){
@@ -360,6 +360,10 @@ static void createGameUI(){
    lv_obj_set_style_pad_all(turnFrame[side],0,0);
    lv_obj_set_style_bg_opa(turnFrame[side],LV_OPA_TRANSP,0);
    lv_obj_set_style_border_width(turnFrame[side],4,0);
+   // U-shaped border: never draw the shared center seam.
+   lv_obj_set_style_border_side(turnFrame[side],side==0?
+       (LV_BORDER_SIDE_LEFT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM):
+       (LV_BORDER_SIDE_RIGHT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM),0);
    lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0xFFD348),0);
    lv_obj_set_style_shadow_width(turnFrame[side],0,0);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_CLICKABLE);
