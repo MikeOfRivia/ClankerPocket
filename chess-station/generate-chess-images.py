@@ -9,11 +9,11 @@ font = ImageFont.truetype(font_file, 41)
 symbols = "♔♕♖♗♘♙♚♛♜♝♞♟"
 chunks = ['#include <lvgl.h>', '']
 names = []
-for i, symbol in enumerate(symbols):
+for i, symbol in enumerate(symbols + symbols):
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     # White pieces have dark outlines; black pieces have light outlines.
-    is_black = i >= 6
+    is_black = (i % 12) >= 6
     fill = (22, 24, 31, 255) if is_black else (253, 251, 242, 255)
     stroke = (244, 240, 226, 255) if is_black else (29, 33, 42, 255)
     bbox = draw.textbbox((0, 0), symbol, font=font, stroke_width=1)
@@ -21,6 +21,9 @@ for i, symbol in enumerate(symbols):
     x = (size-tw)/2-bbox[0]
     y = (size-th)/2-bbox[1]
     draw.text((x, y), symbol, font=font, fill=fill, stroke_width=1, stroke_fill=stroke)
+    if i >= 12:
+        # Device is physically turned clockwise; turn sprites CCW in flash.
+        img = img.rotate(90, expand=False)
     pixels = bytearray()
     for r,g,b,a in img.getdata():
         pixels.extend((b,g,r,a)) # LVGL 9 ARGB8888, little-endian byte order.
@@ -31,7 +34,7 @@ for i, symbol in enumerate(symbols):
         chunks.append('  ' + ', '.join(f'0x{v:02x}' for v in pixels[j:j+32]) + ',')
     chunks.append('};')
     chunks.append('')
-chunks.append('extern const lv_image_dsc_t chess_piece_images[12] = {')
+chunks.append('extern const lv_image_dsc_t chess_piece_images[24] = {')
 for name in names:
     chunks.append(
         '  { .header = { .magic = LV_IMAGE_HEADER_MAGIC, .cf = LV_COLOR_FORMAT_ARGB8888, '
