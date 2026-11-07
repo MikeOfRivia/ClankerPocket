@@ -1,0 +1,110 @@
+name: Build Shape Siege — Waveshare 7-inch
+
+on:
+  push:
+    branches: [waveshare-7-touch-baseline]
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out Shape Siege source
+        uses: actions/checkout@v4
+        with:
+          ref: waveshare-7-touch-baseline
+
+      - name: Install Arduino CLI and ESP32 board support
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s 1.5.1
+          echo "$PWD/bin" >> "$GITHUB_PATH"
+          ./bin/arduino-cli config init --overwrite
+          ./bin/arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          ./bin/arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Fetch official Waveshare hardware stack and restore game
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/waveshareteam/ESP32-S3-Touch-LCD-7.git upstream
+          cd upstream
+          git sparse-checkout set examples/Arduino/examples/10_lvgl_v9_demo examples/Arduino/libraries/ESP32_Display_Panel examples/Arduino/libraries/ESP32_IO_Expander examples/Arduino/libraries/esp-lib-utils
+          cd ..
+          mkdir -p deps sketch/ShapeSiege
+          cp -a upstream/examples/Arduino/libraries/ESP32_Display_Panel deps/
+          cp -a upstream/examples/Arduino/libraries/ESP32_IO_Expander deps/
+          cp -a upstream/examples/Arduino/libraries/esp-lib-utils deps/
+          for f in esp_lv_adapter_arduino.cpp esp_lv_adapter_arduino.h esp_panel_board_custom_conf.h; do
+            cp "upstream/examples/Arduino/examples/10_lvgl_v9_demo/$f" sketch/ShapeSiege/
+          done
+          python3 -m pip install --user brotli
+          python3 - <<'PY'
+          import base64, brotli, hashlib
+          from pathlib import Path
+          encoded = Path('shape-siege/ShapeSiege.ino.br.b64').read_text().strip()
+          source = brotli.decompress(base64.b64decode(encoded))
+          sha = hashlib.sha256(source).hexdigest()
+          assert sha == 'd8e80d356669b64fb70e2ce2422c81a1ba2352688e29c57b9ede8183bc79a21f', sha
+          Path('sketch/ShapeSiege/ShapeSiege.ino').write_bytes(source)
+          print('Restored original Shape Siege source, SHA256', sha)
+          PY
+          git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
+          find deps/lvgl -name '*.S' -type f -delete
+          cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
+          sed -i 's/^#if 0 \/\* Set this to "1" to enable content \*\//#if 1 \/\* Set this to "1" to enable content \*\//' deps/lv_conf.h
+          grep -q '^#define ESP_OPEN_TOUCH 1' sketch/ShapeSiege/esp_panel_board_custom_conf.h
+
+      - name: Compile Shape Siege
+        shell: bash
+        run: |
+          set -euxo pipefail
+          arduino-cli compile \
+            --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=default,PSRAM=opi,LoopCore=0' \
+            --libraries "$PWD/deps" \
+            --build-path "$PWD/build" \
+            --output-dir "$PWD/firmware" \
+            sketch/ShapeSiege
+
+      - name: Merge and package COM6 flash image
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m pip install --user 'esptool==5.3.1'
+          python3 -m esptool --chip esp32s3 merge-bin \
+            -o firmware/shape-siege-full.bin \
+            --flash-mode dio --flash-freq 80m --flash-size 16MB \
+            0x0 firmware/ShapeSiege.ino.bootloader.bin \
+            0x8000 firmware/ShapeSiege.ino.partitions.bin \
+            0x10000 firmware/ShapeSiege.ino.bin
+          cat > firmware/flash.ps1 <<'PS1'
+          param([string]$Port = 'COM6')
+          $ErrorActionPreference = 'Stop'
+          Set-Location $PSScriptRoot
+          py -m esptool --chip esp32s3 --port $Port --baud 460800 write-flash 0x0 .\shape-siege-full.bin
+          if ($LASTEXITCODE -ne 0) { throw 'Flash failed. Try BOOT + RESET, then retry.' }
+          Write-Host 'Shape Siege flashed. Press RESET to start.' -ForegroundColor Green
+          PS1
+          cat > firmware/README.txt <<'EOF'
+          SHAPE SIEGE - Waveshare ESP32-S3-Touch-LCD-7 (800x480)
+          1. Extract this artifact ZIP.
+          2. Open PowerShell in that folder.
+          3. Run: Set-ExecutionPolicy -Scope Process Bypass -Force
+          4. Run: .\flash.ps1 -Port COM6
+          5. Press RESET after flashing.
+
+          No Arduino or Git needed on Windows.
+          This FULL firmware image replaces the Waveshare touchscreen test.
+          It is the original 50-wave, 3-map Shape Siege game source.
+          EOF
+
+      - name: Upload ready-to-flash Shape Siege
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShapeSiege-COM6-Flash
+          path: |
+            firmware/shape-siege-full.bin
+            firmware/flash.ps1
+            firmware/README.txt
+          if-no-files-found: error
