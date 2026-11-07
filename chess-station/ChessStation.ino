@@ -19,6 +19,8 @@ static uint8_t spyChecks[2]={0,0}; // White and Black checks received.
 static int8_t winnerSide=-1; // 0 white, 1 black; -1 draw or unfinished.
 static bool endModalShown=false;
 static lv_obj_t *turnFrame[2]={nullptr,nullptr};
+static lv_obj_t *spyPips[2][3]={{nullptr,nullptr,nullptr},{nullptr,nullptr,nullptr}};
+static uint8_t renderedSpyChecks[2]={255,255};
 static int8_t renderedTurn=-1;
 static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":variant==VARIANT_SPY?"SPY KINGS":"STANDARD";}
 static lv_obj_t *screen;
@@ -242,6 +244,17 @@ static void drawBoard(){
   }
  }
  if(!vsAI){
+  // Compact exposure meter: three pips beneath each player's half.
+  // A red pip is one check received, not checks delivered.
+  if(variant==VARIANT_SPY){
+   for(int side=0;side<2;side++){
+    if(renderedSpyChecks[side]==spyChecks[side])continue;
+    for(int j=0;j<3;j++)if(spyPips[side][j])
+     lv_obj_set_style_bg_color(spyPips[side][j],
+        lv_color_hex(j<spyChecks[side]?0xFF5663:0x19482E),0);
+    renderedSpyChecks[side]=spyChecks[side];
+   }
+  }
   const int active=blackToMove?1:0;
   if(renderedTurn!=active){
    for(int side=0;side<2;side++){
@@ -413,6 +426,8 @@ static void showEndModal(){
 static void createGameUI(){
  inGame=true;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;
+ for(int side=0;side<2;side++)for(int j=0;j<3;j++)spyPips[side][j]=nullptr;
+ renderedSpyChecks[0]=renderedSpyChecks[1]=255;
  renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
@@ -505,6 +520,22 @@ static void createGameUI(){
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_CLICKABLE);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_SCROLLABLE);
    lv_obj_add_flag(turnFrame[side],LV_OBJ_FLAG_HIDDEN);
+  }
+ }
+ if(!vsAI&&variant==VARIANT_SPY){
+  for(int side=0;side<2;side++)for(int j=0;j<3;j++){
+   lv_obj_t *pip=lv_obj_create(screen);
+   spyPips[side][j]=pip;
+   lv_obj_set_pos(pip,(side==0?252:468)+j*28,464);
+   lv_obj_set_size(pip,18,8);
+   lv_obj_set_style_radius(pip,2,0);
+   lv_obj_set_style_pad_all(pip,0,0);
+   lv_obj_set_style_border_width(pip,1,0);
+   lv_obj_set_style_border_color(pip,lv_color_hex(0x316444),0);
+   lv_obj_set_style_bg_color(pip,lv_color_hex(0x19482E),0);
+   lv_obj_set_style_shadow_width(pip,0,0);
+   lv_obj_remove_flag(pip,LV_OBJ_FLAG_CLICKABLE);
+   lv_obj_remove_flag(pip,LV_OBJ_FLAG_SCROLLABLE);
   }
  }
  drawBoard();
