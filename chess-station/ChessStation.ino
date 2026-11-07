@@ -361,9 +361,9 @@ static void createGameUI(){
    lv_obj_set_style_bg_opa(turnFrame[side],LV_OPA_TRANSP,0);
    lv_obj_set_style_border_width(turnFrame[side],4,0);
    // U-shaped border: never draw the shared center seam.
-   lv_obj_set_style_border_side(turnFrame[side],side==0?
+   lv_obj_set_style_border_side(turnFrame[side],(lv_border_side_t)(side==0?
        (LV_BORDER_SIDE_LEFT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM):
-       (LV_BORDER_SIDE_RIGHT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM),0);
+       (LV_BORDER_SIDE_RIGHT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM)),0);
    lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0xFFD348),0);
    lv_obj_set_style_shadow_width(turnFrame[side],0,0);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_CLICKABLE);
