@@ -177,12 +177,12 @@ static void drawBoard(){
    renderedPiece[i]=p;
   }
   const bool dark=(((i>>3)+(i&7))&1);
-  uint32_t bg=dark?0x71926F:0xE9E3C9;
+  uint32_t bg=dark?0x6B6255:0xEAE0CA;
   // Subtle last-move markers on BOTH origin and destination, including the
   // computer's reply. Derived from history so Undo and New Game stay correct.
   if(historyCount>0){
    const mcumax_move last=history[historyCount-1];
-   if(sq==last.from||sq==last.to)bg=dark?0x8C9965:0xD1CA82;
+   if(sq==last.from||sq==last.to)bg=dark?0x94804F:0xE8CD87;
   }
   // Capture squares are red, but the selected piece remains gold.
   const bool legalTarget=selected>=0&&canMove((uint8_t)selected,sq);
@@ -234,7 +234,10 @@ static lv_obj_t *newButton(lv_obj_t *parent,int x,int y,int w,int h,const char *
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);
  lv_obj_set_style_radius(b,8,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x34445A),0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x182333),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(0xD8AF62),0);
+ lv_obj_set_style_border_width(b,2,0);
+ lv_obj_set_style_text_color(b,lv_color_hex(0xF8EED7),0);
  lv_obj_add_event_cb(b,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
  lv_obj_t *l=lv_label_create(b);lv_label_set_text(l,caption);lv_obj_center(l);
  return b;
@@ -250,7 +253,9 @@ static lv_obj_t *rotatedButton(lv_obj_t *parent,int x,int y,int graphic,int acti
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,66,182);
  lv_obj_set_style_radius(b,9,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x34445A),0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x182333),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(0xD8AF62),0);
+ lv_obj_set_style_border_width(b,2,0);
  lv_obj_add_event_cb(b,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
  lv_obj_t *label=lv_image_create(b);
  lv_image_set_src(label,&chess_rotated_buttons[graphic]);
@@ -352,7 +357,7 @@ static void createGameUI(){
   moveDots[i]=lv_obj_create(cells[i]);
   lv_obj_set_size(moveDots[i],16,16);
   lv_obj_set_style_radius(moveDots[i],LV_RADIUS_CIRCLE,0);
-  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0x2874BA),0);
+  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0xD2A649),0);
   lv_obj_set_style_bg_opa(moveDots[i],LV_OPA_COVER,0);
   lv_obj_set_style_border_width(moveDots[i],0,0);
   lv_obj_set_style_shadow_width(moveDots[i],0,0);
@@ -397,10 +402,10 @@ static void createHome(){
  lv_obj_t *brand=lv_image_create(screen);
  lv_image_set_src(brand,&chess_logo);
  lv_obj_set_style_image_recolor_opa(brand,LV_OPA_TRANSP,0);
- lv_obj_align(brand,LV_ALIGN_TOP_MID,0,0);
+ lv_obj_set_pos(brand,10,20);
  lv_obj_remove_flag(brand,LV_OBJ_FLAG_CLICKABLE);
- newButton(screen,275,260,250,65,"1 PLAYER",5);
- newButton(screen,275,345,250,65,"2 PLAYERS",6);
+ newButton(screen,466,160,276,72,"1 PLAYER",5);
+ newButton(screen,466,275,276,72,"2 PLAYERS",6);
 }
 static void resetGame(){
  if(!vsAI&&variant==VARIANT_KNIGHTS){
