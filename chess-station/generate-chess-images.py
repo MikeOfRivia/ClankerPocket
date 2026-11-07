@@ -6,7 +6,8 @@ import sys
 font_file, target = sys.argv[1:3]
 size = 44
 font = ImageFont.truetype(font_file, 41)
-symbols = "♔♕♖♗♘♙♚♛♜♝♞♟"
+# Use filled glyph silhouettes for BOTH sides; color distinguishes the teams.
+symbols = "♚♛♜♝♞♟♚♛♜♝♞♟"
 chunks = ['#include <lvgl.h>', '']
 names = []
 for i, symbol in enumerate(symbols + symbols):
