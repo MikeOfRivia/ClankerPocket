@@ -27,6 +27,7 @@ static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
 static bool vsAI=true, awaitingAI=false, gameOver=false;
+static bool selectingDifficulty=false; // AI setup: mode first, then level.
 static uint8_t level=3; // Intermediate, intended as the user's starting difficulty
 static int selected=-1;
 static mcumax_move validMoves[256];
@@ -61,12 +62,12 @@ static void refreshLegal(){
  if(validCount==0){
   gameOver=true;
   endReason=(checkedKingSquare()>=0)?END_CHECKMATE:END_STALEMATE;
-  winnerSide=(endReason==END_CHECKMATE&&(vsAI||variant!=VARIANT_SPY))?
+  winnerSide=(endReason==END_CHECKMATE&&variant!=VARIANT_SPY)?
     ((mcumax_get_current_side()==0x10)?0:1):-1;
  }else gameOver=false;
 }
 static void resolveSpyMove(mcumax_move m){
- if(vsAI||variant!=VARIANT_SPY)return;
+ if(variant!=VARIANT_SPY)return;
  const bool moverBlack=(mcumax_get_current_side()!=0x10);
  const mcumax_piece arrived=mcumax_get_piece(m.to);
  if((arrived&7)==MCUMAX_KING &&
@@ -248,18 +249,18 @@ static void drawBoard(){
    renderedColor[i]=bg;
   }
  }
- if(!vsAI){
-  // Compact exposure meter: three pips beneath each player's half.
+ if(variant==VARIANT_SPY){
+  // Compact exposure meter: three pips for each king, also in solo play.
   // A red pip is one check received, not checks delivered.
-  if(variant==VARIANT_SPY){
-   for(int side=0;side<2;side++){
-    if(renderedSpyChecks[side]==spyChecks[side])continue;
-    for(int j=0;j<3;j++)if(spyPips[side][j])
-     lv_obj_set_style_bg_color(spyPips[side][j],
-        lv_color_hex(j<spyChecks[side]?0xFF5663:0x19482E),0);
-    renderedSpyChecks[side]=spyChecks[side];
-   }
+  for(int side=0;side<2;side++){
+   if(renderedSpyChecks[side]==spyChecks[side])continue;
+   for(int j=0;j<3;j++)if(spyPips[side][j])
+    lv_obj_set_style_bg_color(spyPips[side][j],
+       lv_color_hex(j<spyChecks[side]?0xFF5663:0x19482E),0);
+   renderedSpyChecks[side]=spyChecks[side];
   }
+ }
+ if(!vsAI){
   const int active=blackToMove?1:0;
   if(renderedTurn!=active){
    for(int side=0;side<2;side++){
@@ -344,11 +345,11 @@ static void openSelectionModal(){
  lv_obj_set_style_pad_all(panel,0,0);
  lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *title=lv_label_create(panel);
- lv_label_set_text(title,vsAI?"CHOOSE DIFFICULTY":"CHOOSE GAME MODE");
+ lv_label_set_text(title,selectingDifficulty?"CHOOSE DIFFICULTY":"CHOOSE GAME MODE");
  lv_obj_set_style_text_color(title,lv_color_hex(0xA8FFB9),0);
  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,18);
- if(vsAI){
+ if(selectingDifficulty){
   newButton(panel,48,65,292,55,"BEGINNER",15);
   newButton(panel,48,128,292,55,"NOVICE",16);
   newButton(panel,48,191,292,55,"INTERMEDIATE",17);
@@ -411,12 +412,12 @@ static void showEndModal(){
  lv_obj_set_style_text_color(detail,lv_color_hex(0x82B49A),0);
  const char *description=endReason==END_INFILTRATION?"Enemy back rank reached":
     endReason==END_EXPOSED?"Third check: spy exposed":
-    endReason==END_CHECKMATE?(variant==VARIANT_SPY&&!vsAI?
+    endReason==END_CHECKMATE?(variant==VARIANT_SPY?
        "Spy Kings: checkmate is a draw":"The king has been checkmated"):
     "No legal moves remain";
  lv_label_set_text(detail,description);
  lv_obj_align(detail,LV_ALIGN_TOP_MID,0,151);
- if(variant==VARIANT_SPY&&!vsAI){
+ if(variant==VARIANT_SPY){
   lv_obj_t *counter=lv_label_create(panel);
   char stats[64];
   snprintf(stats,sizeof(stats),"CHECKS RECEIVED: WHITE %u/3  BLACK %u/3",
@@ -528,11 +529,18 @@ static void createGameUI(){
    lv_obj_add_flag(turnFrame[side],LV_OBJ_FLAG_HIDDEN);
   }
  }
- if(!vsAI&&variant==VARIANT_SPY){
-  for(int side=0;side<2;side++)for(int j=0;j<3;j++){
+ if(variant==VARIANT_SPY){
+  for(int side=0;side<2;side++){
+   if(vsAI){
+    lv_obj_t *who=lv_label_create(screen);
+    lv_label_set_text(who,side==0?"WHITE CHECKS":"BLACK CHECKS");
+    lv_obj_set_style_text_color(who,lv_color_hex(0x9DECAC),0);
+    lv_obj_set_pos(who,40,357+side*55);
+   }
+   for(int j=0;j<3;j++){
    lv_obj_t *pip=lv_obj_create(screen);
    spyPips[side][j]=pip;
-   lv_obj_set_pos(pip,(side==0?252:468)+j*28,464);
+   lv_obj_set_pos(pip,vsAI?40+j*28:(side==0?252:468)+j*28,vsAI?381+side*55:464);
    lv_obj_set_size(pip,18,8);
    lv_obj_set_style_radius(pip,2,0);
    lv_obj_set_style_pad_all(pip,0,0);
@@ -542,6 +550,7 @@ static void createGameUI(){
    lv_obj_set_style_shadow_width(pip,0,0);
    lv_obj_remove_flag(pip,LV_OBJ_FLAG_CLICKABLE);
    lv_obj_remove_flag(pip,LV_OBJ_FLAG_SCROLLABLE);
+   }
   }
  }
  drawBoard();
@@ -603,16 +612,16 @@ static void newScrambleFen(){
    "%s/pppppppp/8/8/8/8/PPPPPPPP/%s w - - 0 1",black,white);
 }
 static void loadOpeningPosition(){
- if(!vsAI&&variant==VARIANT_KNIGHTS)
+ if(variant==VARIANT_KNIGHTS)
   mcumax_set_fen_position("nnnnknnn/nnnnnnnn/8/8/8/8/NNNNNNNN/NNNNKNNN w - - 0 1");
- else if(!vsAI&&variant==VARIANT_PAWNS)
+ else if(variant==VARIANT_PAWNS)
   mcumax_set_fen_position("ppppkppp/pppppppp/8/8/8/8/PPPPPPPP/PPPPKPPP w - - 0 1");
- else if(!vsAI&&variant==VARIANT_SCRAMBLE)
+ else if(variant==VARIANT_SCRAMBLE)
   mcumax_set_fen_position(scrambleFen);
  else mcumax_init();
 }
 static void resetGame(){
- if(!vsAI&&variant==VARIANT_SCRAMBLE)newScrambleFen();
+ if(variant==VARIANT_SCRAMBLE)newScrambleFen();
  loadOpeningPosition();
  historyCount=0;selected=-1;awaitingAI=false;
  endReason=END_NONE;winnerSide=-1;spyChecks[0]=spyChecks[1]=0;endModalShown=false;
@@ -688,34 +697,54 @@ void loop(){
  if(sq>=0)queuedSquare=-1;
  bool dirty=false;
  if(a){
-  // Changing modes/difficulty only happens once the user actually picks.
+  // For both player counts: choose a mode. Solo then chooses difficulty.
+  // A match isn't reset until all applicable choices are complete.
   if(a==5||a==6||a==1){
    if(a!=1)vsAI=(a==5);
-   if(!inGame||a==1){
-    if(esp_lv_adapter_lock(1000)==ESP_OK){
-     openSelectionModal();
-     esp_lv_adapter_unlock();
-    }
+   selectingDifficulty=false;
+   if(esp_lv_adapter_lock(1000)==ESP_OK){
+    openSelectionModal();
+    esp_lv_adapter_unlock();
    }
   }else if(a==7){
+   selectingDifficulty=false;
    if(esp_lv_adapter_lock(1000)==ESP_OK){
     createHome();
     esp_lv_adapter_unlock();
    }
-  }else if(a==14){
+  }else if(a==14&&modeOverlay){
    if(esp_lv_adapter_lock(1000)==ESP_OK){
     closeModeModal();
+    if(vsAI&&selectingDifficulty){
+     selectingDifficulty=false;
+     openSelectionModal(); // Back to mode choice.
+    }
     esp_lv_adapter_unlock();
    }
-  }else if(modeOverlay&&((vsAI&&a>=15&&a<=18)||(!vsAI&&((a>=11&&a<=13)||a==19||a==20)))){
-   if(vsAI)level=(uint8_t)(a-14);
-   else variant=(a==19)?VARIANT_SPY:(a==20)?VARIANT_SCRAMBLE:(GameVariant)(a-11);
+  }else if(modeOverlay&&!selectingDifficulty&&
+    ((a>=11&&a<=13)||a==19||a==20)){
+   variant=(a==19)?VARIANT_SPY:(a==20)?VARIANT_SCRAMBLE:(GameVariant)(a-11);
+   if(vsAI){
+    if(esp_lv_adapter_lock(1000)==ESP_OK){
+     closeModeModal();
+     selectingDifficulty=true;
+     openSelectionModal();
+     esp_lv_adapter_unlock();
+    }
+   }else{
+    resetGame();
+    if(esp_lv_adapter_lock(1000)==ESP_OK){
+     createGameUI();
+     esp_lv_adapter_unlock();
+    }
+   }
+  }else if(modeOverlay&&vsAI&&selectingDifficulty&&a>=15&&a<=18){
+   level=(uint8_t)(a-14);
+   selectingDifficulty=false;
    resetGame();
    if(esp_lv_adapter_lock(1000)==ESP_OK){
     createGameUI();
     esp_lv_adapter_unlock();
-   }else{
-    Serial.println("Chess: LVGL lock timeout on new game");
    }
   }
  }
