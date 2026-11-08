@@ -61,7 +61,7 @@ jobs:
           sed -i 's/^#define LV_FONT_MONTSERRAT_28 0/#define LV_FONT_MONTSERRAT_28 1/' deps/lv_conf.h
           sed -i 's/^#define LV_USE_TJPGD 0/#define LV_USE_TJPGD 1/' deps/lv_conf.h
           sed -i 's/^#define LV_USE_FS_MEMFS 0/#define LV_USE_FS_MEMFS 1/' deps/lv_conf.h
-          sed -i "s/^    #define LV_FS_MEMFS_LETTER '\\\\0'/    #define LV_FS_MEMFS_LETTER 'M'/" deps/lv_conf.h
+          sed -i "s/#define LV_FS_MEMFS_LETTER .*/#define LV_FS_MEMFS_LETTER 'M'/" deps/lv_conf.h
           grep -q "LV_FS_MEMFS_LETTER 'M'" deps/lv_conf.h
           grep -q '^#define LV_USE_TJPGD 1' deps/lv_conf.h
           grep -q '^#define LV_USE_FS_MEMFS 1' deps/lv_conf.h
