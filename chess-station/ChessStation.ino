@@ -711,6 +711,22 @@ static void createArcadeChoice(){
  newButton(sc,418,171,240,84,"2 PLAYERS",41);
  newButton(sc,276,306,248,65,"BACK",7);
 }
+static void createCheckersDifficulty(){
+ launcherVisible=false;
+ lv_obj_clean(lv_screen_active());
+ lv_obj_t *sc=lv_screen_active();
+ lv_obj_set_style_bg_color(sc,lv_color_hex(0x25160D),0);
+ lv_obj_remove_flag(sc,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_t *title=lv_label_create(sc);
+ lv_label_set_text(title,"CHECKERS - CHOOSE OPPONENT");
+ lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
+ lv_obj_set_style_text_color(title,lv_color_hex(0xF4D19B),0);
+ lv_obj_align(title,LV_ALIGN_TOP_MID,0,70);
+ newButton(sc,70,196,200,88,"EASY",60);
+ newButton(sc,302,196,200,88,"MEDIUM",61);
+ newButton(sc,534,196,200,88,"HARD",62);
+ newButton(sc,275,359,250,62,"BACK",7);
+}
 static void createHome(){
  launcherVisible=false;
  clearAiAnimation();
@@ -896,7 +912,17 @@ void loop(){
   }else if((a==40||a==41)&&arcadeChoice!=0){
    if(esp_lv_adapter_lock(1000)==ESP_OK){
     launcherVisible=false;
-    arcade::start((arcade::Game)arcadeChoice,a==40);
+    if(a==40&&arcadeChoice==arcade::CHECKERS)createCheckersDifficulty();
+    else{
+     arcade::start((arcade::Game)arcadeChoice,a==40);
+     arcadeChoice=0;
+    }
+    esp_lv_adapter_unlock();
+   }
+  }else if(a>=60&&a<=62&&arcadeChoice==arcade::CHECKERS){
+   if(esp_lv_adapter_lock(1000)==ESP_OK){
+    arcade::difficulty=(uint8_t)(a-60);
+    arcade::start(arcade::CHECKERS,true);
     arcadeChoice=0;
     esp_lv_adapter_unlock();
    }
