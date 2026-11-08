@@ -4,6 +4,7 @@
 #include <lvgl.h>
 #include "esp_lv_adapter_arduino.h"
 #include "mcu-max.h"
+#include "ArcadeGames.h"
 
 using namespace esp_panel::drivers;
 using namespace esp_panel::board;
@@ -26,6 +27,25 @@ static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
+static uint8_t launcherPage=0;
+static uint8_t arcadeChoice=0;
+static int16_t launcherTouchX=0;
+static bool launcherTouchDown=false;
+static void createLauncher();
+static void createArcadeChoice();
+static void launcherGesture(lv_event_t *e){
+ if(lv_event_get_code(e)==LV_EVENT_GESTURE){
+  lv_indev_t *indev=lv_indev_active();
+  if(!indev)return;
+  const lv_dir_t dir=lv_indev_get_gesture_dir(indev);
+  // Four tiles per page. The next page appears only when it contains games.
+  const uint8_t pages=1;
+  if(dir==LV_DIR_LEFT&&launcherPage+1<pages)launcherPage++;
+  else if(dir==LV_DIR_RIGHT&&launcherPage>0)launcherPage--;
+  else return;
+  createLauncher();
+ }
+}
 static bool vsAI=true, awaitingAI=false, gameOver=false;
 // The engine stays on its pre-move board while a temporary LVGL sprite travels.
 // The actual move is committed only after the 300ms animation finishes.
@@ -624,6 +644,54 @@ static void createGameUI(){
  drawBoard();
 }
 
+// Board Station launcher is the boot screen. This keeps chess' existing
+// player/mode/difficulty flow intact behind the CHESS tile.
+static void createLauncher(){
+ clearAiAnimation();
+ awaitingAI=false;inGame=false;arcade::game=arcade::NONE;
+ modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
+ lv_obj_clean(lv_screen_active());
+ screen=lv_screen_active();
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
+ lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_add_event_cb(screen,launcherGesture,LV_EVENT_GESTURE,nullptr);
+ lv_obj_t *title=lv_label_create(screen);
+ lv_label_set_text(title,"BOARD STATION");
+ lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
+ lv_obj_set_style_text_color(title,lv_color_hex(0x77FF99),0);
+ lv_obj_align(title,LV_ALIGN_TOP_MID,0,12);
+ static const char *names[]={"CHESS","CHECKERS","CONNECT FOUR","HANGBOT"};
+ static const char *sub[]={"FIVE VARIANTS","CAPTURE THE KINGS","FOUR IN A ROW","GUESS THE WORD"};
+ for(int i=0;i<4;i++){
+  const int x=20+(i%2)*390,y=62+(i/2)*195;
+  lv_obj_t *tile=newButton(screen,x,y,370,180,names[i],30+i);
+  lv_obj_t *t=lv_label_create(tile);
+  lv_label_set_text(t,sub[i]);
+  lv_obj_set_style_text_color(t,lv_color_hex(0x689C75),0);
+  lv_obj_align(t,LV_ALIGN_BOTTOM_MID,0,-25);
+  lv_obj_t *main=lv_obj_get_child(tile,0);
+  lv_obj_set_style_text_font(main,&lv_font_montserrat_24,0);
+  lv_obj_align(main,LV_ALIGN_CENTER,0,-12);
+ }
+ lv_obj_t *footer=lv_label_create(screen);
+ lv_label_set_text(footer,"BOARD STATION     01 / 01");
+ lv_obj_set_style_text_color(footer,lv_color_hex(0x659373),0);
+ lv_obj_align(footer,LV_ALIGN_BOTTOM_MID,0,-4);
+}
+static void createArcadeChoice(){
+ lv_obj_clean(lv_screen_active());
+ lv_obj_t *sc=lv_screen_active();
+ lv_obj_set_style_bg_color(sc,lv_color_hex(0x050E0B),0);
+ lv_obj_remove_flag(sc,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_t *title=lv_label_create(sc);
+ lv_label_set_text(title,arcadeChoice==arcade::CHECKERS?"CHECKERS": "CONNECT FOUR");
+ lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
+ lv_obj_set_style_text_color(title,lv_color_hex(0x77FF99),0);
+ lv_obj_align(title,LV_ALIGN_TOP_MID,0,55);
+ newButton(sc,142,171,240,84,"1 PLAYER",40);
+ newButton(sc,418,171,240,84,"2 PLAYERS",41);
+ newButton(sc,276,306,248,65,"BACK",7);
+}
 static void createHome(){
  clearAiAnimation();
  awaitingAI=false;
@@ -761,17 +829,34 @@ void setup(){
  ESP_ERROR_CHECK(esp_lv_adapter_start());
  mcumax_init();refreshLegal();
  ESP_ERROR_CHECK(esp_lv_adapter_lock(-1));
- createHome();
+ createLauncher();
  esp_lv_adapter_unlock();
  Serial.println("Chess Station ready");
 }
 void loop(){
  const int a=queuedAction;
  const int sq=queuedSquare;
+ const int mini=arcade::input;
+ if(mini>=0)arcade::input=-1;
  if(a)queuedAction=0;
  if(sq>=0)queuedSquare=-1;
  bool dirty=false;
  if(a){
+  // Launcher selection and mini-game player-count selection.
+  if(a>=30&&a<=33){
+   if(esp_lv_adapter_lock(1000)==ESP_OK){
+    if(a==30)createHome(); // Chess uses its existing 1P/2P screen.
+    else if(a==33)arcade::start(arcade::HANGBOT,true);
+    else {arcadeChoice=(a==31)?arcade::CHECKERS:arcade::CONNECT4;createArcadeChoice();}
+    esp_lv_adapter_unlock();
+   }
+  }else if((a==40||a==41)&&arcadeChoice!=0){
+   if(esp_lv_adapter_lock(1000)==ESP_OK){
+    arcade::start((arcade::Game)arcadeChoice,a==40);
+    arcadeChoice=0;
+    esp_lv_adapter_unlock();
+   }
+  }else
   // For both player counts: choose a mode. Solo then chooses difficulty.
   // A match isn't reset until all applicable choices are complete.
   if(a==5||a==6||a==1){
@@ -784,7 +869,8 @@ void loop(){
   }else if(a==7){
    selectingDifficulty=false;
    if(esp_lv_adapter_lock(1000)==ESP_OK){
-    createHome();
+    arcadeChoice=0;
+    createLauncher();
     esp_lv_adapter_unlock();
    }
   }else if(a==14&&modeOverlay){
@@ -821,6 +907,14 @@ void loop(){
     createGameUI();
     esp_lv_adapter_unlock();
    }
+  }
+ }
+ if(mini>=0&&arcade::game!=arcade::NONE){
+  if(mini==900){
+   if(esp_lv_adapter_lock(1000)==ESP_OK){createLauncher();esp_lv_adapter_unlock();}
+  }else if(esp_lv_adapter_lock(1000)==ESP_OK){
+   arcade::handle(mini);
+   esp_lv_adapter_unlock();
   }
  }
  // Prevent taps behind a modal from executing queued chess moves.
