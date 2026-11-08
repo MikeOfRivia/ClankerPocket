@@ -40,6 +40,7 @@ jobs:
             cp "upstream/examples/Arduino/examples/10_lvgl_v9_demo/$f" sketch/ChessStation/
           done
           cp chess-station/ChessStation.ino sketch/ChessStation/ChessStation.ino
+          cp chess-station/ArcadeGames.h sketch/ChessStation/ArcadeGames.h
           git clone --depth 1 https://github.com/Gissio/mcu-max.git engine
           cp engine/src/mcu-max.c engine/src/mcu-max.h sketch/ChessStation/
           python3 chess-station/patch-fen-pawns.py sketch/ChessStation/mcu-max.c
