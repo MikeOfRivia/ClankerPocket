@@ -4,11 +4,13 @@
 #include <Arduino.h>
 #include <lvgl.h>
 #include <string.h>
+extern const lv_image_dsc_t treasure_images[4];
 
 namespace arcade {
 enum Game : uint8_t { NONE=0, CHECKERS=1, CONNECT4=2, HANGBOT=3, DOTS=4, MASTERMIND=5, SOS=6 };
 static Game game=NONE;
 static bool solo=true;
+static uint8_t difficulty=1; // Checkers AI: 0 easy, 1 medium, 2 hard.
 static uint8_t turn=1;        // 1 = human/white, 2 = black/second player.
 static bool done=false;
 static char message[96]="";
@@ -46,8 +48,8 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *cap
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);
  lv_obj_set_style_radius(b,5,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(enabled?0x102C1C:0x102018),0);
- lv_obj_set_style_border_color(b,lv_color_hex(enabled?0x4FEB7C:0x2A5239),0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(enabled?0x422A17:0x302014),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(enabled?0xC59B58:0x5B4830),0);
  lv_obj_set_style_border_width(b,1,0);
  lv_obj_set_style_shadow_width(b,0,0);
  lv_obj_set_style_pad_all(b,0,0);
@@ -55,7 +57,7 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *cap
  else lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_t *l=lv_label_create(b);
  lv_label_set_text(l,caption);
- lv_obj_set_style_text_color(l,lv_color_hex(enabled?0xCBFFDB:0x52735A),0);
+ lv_obj_set_style_text_color(l,lv_color_hex(enabled?0xFAE6BD:0x967E55),0);
  if(font==1)lv_obj_set_style_text_font(l,&lv_font_montserrat_24,0);
  lv_obj_center(l);
  return b;
@@ -63,14 +65,14 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *cap
 static void label(int x,int y,const char *text,int size=0){
  lv_obj_t *l=lv_label_create(screen);
  lv_label_set_text(l,text);
- lv_obj_set_style_text_color(l,lv_color_hex(0xA6FFC0),0);
+ lv_obj_set_style_text_color(l,lv_color_hex(0xE3C393),0);
  lv_obj_set_pos(l,x,y);
  if(size==1)lv_obj_set_style_text_font(l,&lv_font_montserrat_24,0);
 }
 static void header(const char *title){
  screen=lv_screen_active();
  lv_obj_clean(screen);
- lv_obj_set_style_bg_color(screen,lv_color_hex(0x06120B),0);
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x21150C),0);
  lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  label(26,16,title,1);
  label(26,58,message);
@@ -271,27 +273,95 @@ static void hangGuess(int letter){
  else if(misses>=6){done=true;snprintf(message,sizeof(message),"OUT OF GUESSES! WORD: %s",word);}
  else snprintf(message,sizeof(message),"WRONG GUESSES: %u / 6",misses);
 }
+static void bangBotHit(int x,int y,int w,int h,int id,bool active=true){
+ lv_obj_t *b=lv_obj_create(screen);
+ lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);
+ lv_obj_set_style_bg_opa(b,LV_OPA_TRANSP,0);
+ lv_obj_set_style_border_width(b,0,0);
+ lv_obj_set_style_pad_all(b,0,0);
+ lv_obj_set_style_radius(b,0,0);
+ lv_obj_remove_flag(b,LV_OBJ_FLAG_SCROLLABLE);
+ if(active)lv_obj_add_event_cb(b,onButton,LV_EVENT_CLICKED,(void*)(intptr_t)id);
+ else lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
+}
+static void bangPanel(int x,int y,int w,int h,uint32_t color,uint8_t opacity=LV_OPA_COVER){
+ lv_obj_t *b=lv_obj_create(screen);
+ lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);
+ lv_obj_set_style_bg_color(b,lv_color_hex(color),0);
+ lv_obj_set_style_bg_opa(b,opacity,0);
+ lv_obj_set_style_border_width(b,0,0);
+ lv_obj_set_style_radius(b,2,0);
+ lv_obj_set_style_pad_all(b,0,0);
+ lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
+}
 static void showHangbot(){
- header("HANGBOT");
- label(45,123,"CRACK THE SECRET WORD",1);
- char shown[64]={0};
- int j=0;
- for(const char *p=word;*p&&j<60;p++){
+ screen=lv_screen_active();lv_obj_clean(screen);
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x29170F),0);
+ lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_t *bg=lv_image_create(screen);
+ lv_image_set_src(bg,&treasure_images[3]);
+ lv_obj_set_pos(bg,0,0);
+ lv_obj_remove_flag(bg,LV_OBJ_FLAG_CLICKABLE);
+ // Opaque label area covers the placeholder answer rendered in the artwork.
+ bangPanel(203,252,382,49,0xAE7844);
+ char shown[80]={0};int j=0;
+ for(const char *p=word;*p&&j<76;p++){
   shown[j++]=(guesses&(1u<<(*p-'A')))?*p:'_';
   shown[j++]=' ';
  }
- shown[j]=0;
- label(54,215,shown,1);
- char msg[60];snprintf(msg,sizeof(msg),"ROBOT DAMAGE: %u / 6",misses);
- label(54,285,msg,1);
- label(54,339,misses<6?"Guess letters before the robot breaks.":"ROBOT OFFLINE");
- for(int n=0;n<26;n++){
-  char text[2]={(char)('A'+n),0};
-  bool available=!(guesses&(1u<<n))&&!done;
-  button(screen,370+(n%13)*30,177+(n/13)*63,28,51,text,300+n,available);
+ lv_obj_t *answer=lv_label_create(screen);
+ lv_label_set_text(answer,shown);
+ lv_obj_set_style_text_font(answer,&lv_font_montserrat_24,0);
+ lv_obj_set_style_text_color(answer,lv_color_hex(0x2D1B0C),0);
+ lv_obj_align(answer,LV_ALIGN_TOP_MID,0,260);
+ // The supplied illustration includes two demo damage Xs: hide them and
+ // render the actual current state, in the specified six-step order.
+ bangPanel(723,55,35,201,0x2D1C12);
+ static const char *parts[]={"LEFT LEG","RIGHT LEG","LEFT ARM","RIGHT ARM","TORSO","HEAD"};
+ static const int px[]={340,434,304,483,392,409};
+ static const int py[]={222,222,166,170,155,83};
+ for(int i=0;i<6;i++){
+  if(i<misses){
+   lv_obj_t *status=lv_label_create(screen);
+   lv_label_set_text(status,"X");
+   lv_obj_set_style_text_font(status,&lv_font_montserrat_24,0);
+   lv_obj_set_style_text_color(status,lv_color_hex(0xEE4336),0);
+   lv_obj_set_pos(status,727,55+i*34);
+   lv_obj_t *damage=lv_label_create(screen);
+   lv_label_set_text(damage,"X");
+   lv_obj_set_style_text_font(damage,&lv_font_montserrat_28,0);
+   lv_obj_set_style_text_color(damage,lv_color_hex(0xF94A25),0);
+   lv_obj_set_pos(damage,px[i]-12,py[i]-17);
+   lv_obj_remove_flag(damage,LV_OBJ_FLAG_CLICKABLE);
+  }
  }
+ if(misses>0){
+  bangPanel(68,95,182,79,0x392416);
+  char impact[48];
+  snprintf(impact,sizeof(impact),"%s HIT!",parts[misses-1]);
+  lv_obj_t *impactLabel=lv_label_create(screen);
+  lv_label_set_text(impactLabel,impact);
+  lv_obj_set_style_text_color(impactLabel,lv_color_hex(0xFFCC86),0);
+  lv_obj_set_pos(impactLabel,82,122);
+ }
+ if(done){
+  bangPanel(210,250,374,52,0x986237);
+  lv_label_set_text(answer,wordSolved()?"ROBOT SURVIVED!":word);
+  lv_obj_align(answer,LV_ALIGN_TOP_MID,0,260);
+ }
+ const int xs[3]={143,144,241};
+ const int ys[3]={313,354,396};
+ for(int n=0;n<26;n++){
+  int row=n<10?0:n<20?1:2;
+  int col=row==0?n:row==1?n-10:n-20;
+  int x=xs[row]+col*51;
+  bool enabled=!(guesses&(1u<<n))&&!done;
+  if(!enabled)bangPanel(x,ys[row],44,35,0x20140E,LV_OPA_60);
+  bangBotHit(x,ys[row],44,34,300+n,enabled);
+ }
+ bangBotHit(37,393,91,62,900);
+ bangBotHit(658,387,111,70,901);
 }
-
 static int dotsEdgeCount(){return 40;}
 static int dotsBoxEdge(int row,int col,int side){
  // Horizontal edges 0..19 (5 rows x 4 columns).
