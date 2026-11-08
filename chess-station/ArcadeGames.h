@@ -6,7 +6,7 @@
 #include <string.h>
 
 namespace arcade {
-enum Game : uint8_t { NONE=0, CHECKERS=1, CONNECT4=2, HANGBOT=3 };
+enum Game : uint8_t { NONE=0, CHECKERS=1, CONNECT4=2, HANGBOT=3, DOTS=4, MASTERMIND=5, SOS=6 };
 static Game game=NONE;
 static bool solo=true;
 static uint8_t turn=1;        // 1 = human/white, 2 = black/second player.
@@ -21,6 +21,17 @@ static uint8_t connect[42]={};
 static uint32_t guesses=0;
 static uint8_t misses=0;
 static const char *word=nullptr;
+// Dots & Boxes: 5x5 dots, 4x4 claimable boxes, 40 edges.
+static uint8_t dotsEdges[40]={},dotsBoxes[16]={},dotsScores[2]={};
+// Mastermind: six-color code, four positions, ten guesses.
+static uint8_t secret[4]={},trial[4]={},mmAttempts=0;
+static uint8_t mmHistory[10][4]={},mmExact[10]={},mmPartial[10]={};
+static uint8_t mmColor=1;
+// SOS: each player places S or O; every SOS scores and earns another turn.
+static char sosCells[36]={};
+static uint16_t sosScores[2]={};
+static char sosLetter='S';
+
 static const char *words[]={
  "CIRCUIT","ROBOT","PUZZLE","GALAXY","VECTOR","CHESS","LASER","ENGINE",
  "MYSTERY","BINARY","PIRATE","TURBINE","FUSION","PLANET","GADGET",
@@ -280,10 +291,208 @@ static void showHangbot(){
   button(screen,370+(n%13)*30,177+(n/13)*63,28,51,text,300+n,available);
  }
 }
+
+static int dotsEdgeCount(){return 40;}
+static int dotsBoxEdge(int row,int col,int side){
+ // Horizontal edges 0..19 (5 rows x 4 columns).
+ // Vertical edges 20..39 (4 rows x 5 columns).
+ return side==0?row*4+col:
+        side==1?20+row*5+col+1:
+        side==2?(row+1)*4+col:
+                 20+row*5+col;
+}
+static int dotsMove(int e){
+ if(e<0||e>=40||dotsEdges[e]||done)return 0;
+ dotsEdges[e]=turn;
+ int gained=0;
+ for(int r=0;r<4;r++)for(int c=0;c<4;c++){
+  int k=r*4+c;
+  if(dotsBoxes[k])continue;
+  if(dotsEdges[dotsBoxEdge(r,c,0)]&&dotsEdges[dotsBoxEdge(r,c,1)]&&
+     dotsEdges[dotsBoxEdge(r,c,2)]&&dotsEdges[dotsBoxEdge(r,c,3)]){
+   dotsBoxes[k]=turn;gained++;dotsScores[turn-1]++;
+  }
+ }
+ int filled=0;for(int i=0;i<40;i++)if(dotsEdges[i])filled++;
+ if(filled==40){
+  done=true;
+  snprintf(message,sizeof(message),"%s",dotsScores[0]==dotsScores[1]?"DRAW":dotsScores[0]>dotsScores[1]?"WHITE WINS":"RED WINS");
+ }else{
+  if(!gained)turn=3-turn;
+  snprintf(message,sizeof(message),"WHITE %u  RED %u  |  %s",
+   dotsScores[0],dotsScores[1],turn==1?"WHITE TO MOVE":"RED TO MOVE");
+ }
+ return gained;
+}
+static void showDots(){
+ header("DOTS & BOXES");
+ label(25,174,solo?"YOU: WHITE\nCPU: RED":"WHITE vs RED");
+ label(25,265,"Claim a box to\nplay again.");
+ const int ox=250,oy=94,step=76;
+ for(int r=0;r<5;r++)for(int c=0;c<5;c++){
+  lv_obj_t *dot=lv_obj_create(screen);
+  lv_obj_set_pos(dot,ox+c*step-5,oy+r*step-5);
+  lv_obj_set_size(dot,11,11);
+  lv_obj_set_style_radius(dot,LV_RADIUS_CIRCLE,0);
+  lv_obj_set_style_border_width(dot,0,0);
+  lv_obj_set_style_pad_all(dot,0,0);
+  lv_obj_set_style_bg_color(dot,lv_color_hex(0xA7FFBD),0);
+  lv_obj_remove_flag(dot,LV_OBJ_FLAG_CLICKABLE);
+ }
+ for(int e=0;e<40;e++){
+  const bool horizontal=e<20;
+  const int row=horizontal?(e/4):((e-20)/5);
+  const int col=horizontal?(e%4):((e-20)%5);
+  const int x=ox+col*step+(horizontal?9:-5);
+  const int y=oy+row*step+(horizontal?-7:9);
+  lv_obj_t *b=lv_obj_create(screen);
+  lv_obj_set_pos(b,x,y);
+  lv_obj_set_size(b,horizontal?step-18:11,horizontal?13:step-18);
+  lv_obj_set_style_radius(b,3,0);
+  lv_obj_set_style_pad_all(b,0,0);
+  lv_obj_set_style_border_width(b,0,0);
+  lv_obj_set_style_bg_color(b,lv_color_hex(dotsEdges[e]==1?0xBFFFD3:dotsEdges[e]==2?0xF36677:0x244732),0);
+  if(!dotsEdges[e])lv_obj_add_event_cb(b,onButton,LV_EVENT_CLICKED,(void*)(intptr_t)(400+e));
+  else lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
+ }
+ for(int r=0;r<4;r++)for(int c=0;c<4;c++)if(dotsBoxes[r*4+c]){
+  lv_obj_t *lab=lv_label_create(screen);
+  lv_label_set_text(lab,dotsBoxes[r*4+c]==1?"W":"R");
+  lv_obj_set_style_text_color(lab,lv_color_hex(dotsBoxes[r*4+c]==1?0xBFFFD3:0xF36677),0);
+  lv_obj_set_pos(lab,ox+c*step+33,oy+r*step+27);
+ }
+}
+static int mmCheck(){
+ uint8_t exact=0,partial=0;
+ bool usedSecret[4]={},usedGuess[4]={};
+ for(int i=0;i<4;i++)if(trial[i]==secret[i]){exact++;usedSecret[i]=usedGuess[i]=true;}
+ for(int i=0;i<4;i++)if(!usedGuess[i]){
+  for(int k=0;k<4;k++)if(!usedSecret[k]&&trial[i]==secret[k]){partial++;usedSecret[k]=true;break;}
+ }
+ if(mmAttempts<10){
+  for(int i=0;i<4;i++)mmHistory[mmAttempts][i]=trial[i];
+  mmExact[mmAttempts]=exact;mmPartial[mmAttempts]=partial;
+ }
+ mmAttempts++;
+ if(exact==4){done=true;strcpy(message,"CODE CRACKED!");}
+ else if(mmAttempts>=10){
+  done=true;
+  snprintf(message,sizeof(message),"FAILED! CODE: %u %u %u %u",secret[0],secret[1],secret[2],secret[3]);
+ }else snprintf(message,sizeof(message),"EXACT %u  MISPLACED %u",exact,partial);
+ for(int i=0;i<4;i++)trial[i]=0;
+ return exact;
+}
+static void showMastermind(){
+ header("MASTERMIND");
+ label(24,130,"Crack the 4-color code.");
+ label(24,163,"Green = correct place.\nAmber = wrong place.");
+ char line[80];
+ for(int row=0;row<mmAttempts&&row<10;row++){
+  snprintf(line,sizeof(line),"%02u: %u %u %u %u    EXACT %u / MISPLACED %u",
+    (unsigned)(row+1),mmHistory[row][0],mmHistory[row][1],
+    mmHistory[row][2],mmHistory[row][3],mmExact[row],mmPartial[row]);
+  label(250,75+row*31,line);
+ }
+ for(int i=0;i<4;i++){
+  char number[4];snprintf(number,sizeof(number),"%u",trial[i]);
+  button(screen,270+i*95,402,78,58,number,510+i,!done,1);
+ }
+ for(int i=1;i<=6;i++){
+  char number[4];snprintf(number,sizeof(number),"%u",i);
+  button(screen,32+(i-1)*64,297,55,60,number,500+i,!done,1);
+ }
+ label(34,365,"Select a color, then tap a slot.");
+ button(screen,661,399,111,61,"GUESS",520,!done);
+}
+static int sosCount(int at){
+ int r=at/6,c=at%6,amount=0;
+ const int dy[4]={0,1,1,-1},dx[4]={1,0,1,1};
+ // Evaluate triples containing the just-placed tile in any of three slots.
+ for(int d=0;d<4;d++)for(int offset=-2;offset<=0;offset++){
+  const int r0=r+offset*dy[d],c0=c+offset*dx[d];
+  const int r2=r0+2*dy[d],c2=c0+2*dx[d];
+  if(r0<0||r2<0||c0<0||c2<0||r0>=6||r2>=6||c0>=6||c2>=6)continue;
+  if(sosCells[r0*6+c0]=='S'&&sosCells[(r0+dy[d])*6+c0+dx[d]]=='O'&&
+     sosCells[r2*6+c2]=='S')amount++;
+ }
+ return amount;
+}
+static void sosPlace(int pos,char letter){
+ if(pos<0||pos>=36||sosCells[pos]||done)return;
+ sosCells[pos]=letter;
+ int gained=sosCount(pos);
+ sosScores[turn-1]+=gained;
+ int occupied=0;for(int i=0;i<36;i++)if(sosCells[i])occupied++;
+ if(occupied==36){
+  done=true;
+  strcpy(message,sosScores[0]==sosScores[1]?"DRAW":sosScores[0]>sosScores[1]?"WHITE WINS":"RED WINS");
+ }else{
+  if(!gained)turn=3-turn;
+  snprintf(message,sizeof(message),"WHITE %u  RED %u  |  %s",
+    sosScores[0],sosScores[1],turn==1?"WHITE TO MOVE":"RED TO MOVE");
+ }
+}
+static void showSOS(){
+ header("SOS");
+ label(32,185,solo?"YOU: WHITE\nCPU: RED":"WHITE vs RED");
+ label(32,265,"Complete SOS in\nany direction.");
+ button(screen,35,354,80,60,"S",650,!done,1);
+ button(screen,129,354,80,60,"O",651,!done,1);
+ label(34,426,sosLetter=='S'?"SELECTED: S":"SELECTED: O");
+ for(int i=0;i<36;i++){
+  const int r=i/6,c=i%6;
+  char name[2]={sosCells[i],0};
+  if(!name[0])strcpy(name," ");
+  lv_obj_t *b=button(screen,259+c*68,63+r*68,64,64,name,600+i,!done,1);
+  if(sosCells[i])lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
+ }
+}
+static void dotsAI(){
+ // Avoid gifting boxes when possible, with an immediate box-claim priority.
+ for(int safety=0;safety<45&&!done&&turn==2;safety++){
+  int choice=-1,best=-10000;
+  for(int e=0;e<40;e++)if(!dotsEdges[e]){
+   int score=(int)random(10);
+   for(int r=0;r<4;r++)for(int c=0;c<4;c++){
+    bool contains=false;int touched=0;
+    for(int side=0;side<4;side++){
+     int edge=dotsBoxEdge(r,c,side);
+     if(edge==e)contains=true;
+     if(dotsEdges[edge])touched++;
+    }
+    if(contains&&touched==3)score+=100;
+    else if(contains&&touched==2)score-=20;
+   }
+   if(score>best){best=score;choice=e;}
+  }
+  if(choice<0)break;
+  dotsMove(choice);
+ }
+}
+static void sosAI(){
+ for(int safety=0;safety<40&&!done&&turn==2;safety++){
+  int best=-1,bestCount=-1;
+  char bestLetter='S';
+  for(int i=0;i<36;i++)if(!sosCells[i]){
+   for(char letter='O';letter<='S';letter+=4){
+    sosCells[i]=letter;
+    int score=sosCount(i);
+    sosCells[i]=0;
+    if(score>bestCount){best=i;bestCount=score;bestLetter=letter;}
+   }
+  }
+  if(best<0)break;
+  sosPlace(best,bestLetter);
+ }
+}
+
 static void render(){
  if(game==CHECKERS)showCheckers();
  else if(game==CONNECT4)showConnect4();
  else if(game==HANGBOT)showHangbot();
+ else if(game==DOTS)showDots();
+ else if(game==MASTERMIND)showMastermind();
+ else if(game==SOS)showSOS();
 }
 static void start(Game g,bool ai){
  game=g;solo=ai;turn=1;done=false;chosen=-1;chain=-1;
@@ -301,6 +510,16 @@ static void start(Game g,bool ai){
  }else if(g==HANGBOT){
   word=words[random(sizeof(words)/sizeof(words[0]))];
   strcpy(message,"SIX MISSES ALLOWED");
+ }else if(g==DOTS){
+  memset(dotsEdges,0,sizeof(dotsEdges));memset(dotsBoxes,0,sizeof(dotsBoxes));
+  memset(dotsScores,0,sizeof(dotsScores));strcpy(message,"WHITE TO MOVE");
+ }else if(g==MASTERMIND){
+  mmAttempts=0;mmColor=1;memset(trial,0,sizeof(trial));
+  for(int i=0;i<4;i++)secret[i]=(uint8_t)random(1,7);
+  strcpy(message,"TEN GUESSES TO CRACK THE CODE");
+ }else if(g==SOS){
+  memset(sosCells,0,sizeof(sosCells));sosScores[0]=sosScores[1]=0;
+  sosLetter='S';strcpy(message,"WHITE TO MOVE");
  }
  render();
 }
@@ -315,6 +534,23 @@ static void handle(int action){
    if(solo&&!done&&turn==2)c4Drop(c4AIMove());
   }
  }else if(game==HANGBOT&&action>=300&&action<326)hangGuess(action-300);
+ else if(game==DOTS&&action>=400&&action<440){
+  if(!solo||turn==1){dotsMove(action-400);if(solo&&!done&&turn==2)dotsAI();}
+ }else if(game==MASTERMIND&&!done){
+  if(action>=501&&action<=506)mmColor=(uint8_t)(action-500);
+  else if(action>=510&&action<514)trial[action-510]=mmColor;
+  else if(action==520){
+   bool ready=true;for(int i=0;i<4;i++)if(!trial[i])ready=false;
+   if(ready)mmCheck();else strcpy(message,"FILL ALL FOUR SLOTS FIRST");
+  }
+ }else if(game==SOS&&!done){
+  if(action==650)sosLetter='S';
+  else if(action==651)sosLetter='O';
+  else if(action>=600&&action<636&&(!solo||turn==1)){
+   sosPlace(action-600,sosLetter);
+   if(solo&&!done&&turn==2)sosAI();
+  }
+ }
  render();
 }
 } // namespace arcade
