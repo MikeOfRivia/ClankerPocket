@@ -29,7 +29,7 @@ static volatile int queuedAction=0;
 static bool vsAI=true, awaitingAI=false, gameOver=false;
 // The engine stays on its pre-move board while a temporary LVGL sprite travels.
 // The actual move is committed only after the 300ms animation finishes.
-struct AiMoveAnimation { bool active=false; mcumax_move move={MCUMAX_SQUARE_INVALID,MCUMAX_SQUARE_INVALID}; lv_obj_t *sprite=nullptr; uint32_t start=0; int x0=0,y0=0,x1=0,y1=0; };
+struct AiMoveAnimation { bool active=false; mcumax_move move={MCUMAX_SQUARE_INVALID,MCUMAX_SQUARE_INVALID}; lv_obj_t *sprite=nullptr; volatile bool finished=false; int x0=0,y0=0,x1=0,y1=0; };
 static AiMoveAnimation aiAnim;
 static constexpr uint32_t AI_MOVE_ANIMATION_MS=300;
 static bool selectingDifficulty=false; // AI setup: mode first, then level.
@@ -207,14 +207,30 @@ static void aiSpritePosition(uint8_t sq,int &x,int &y){
  x=346+(sq&7)*54+5;
  y=22+(sq>>4)*54+5;
 }
+static void aiAnimationFrame(void *obj,int32_t progress){
+ // Runs inside LVGL's own handler, not the chess/game loop.
+ if(!aiAnim.active||obj!=aiAnim.sprite)return;
+ const int x=aiAnim.x0+(int)(((int64_t)(aiAnim.x1-aiAnim.x0)*progress)/1000);
+ const int y=aiAnim.y0+(int)(((int64_t)(aiAnim.y1-aiAnim.y0)*progress)/1000);
+ lv_obj_set_pos((lv_obj_t*)obj,x,y);
+}
+static void aiAnimationReady(lv_anim_t *a){
+ (void)a;
+ aiAnim.finished=true; // Game loop commits the chess move, never LVGL callbacks.
+}
 static void clearAiAnimation(){
  // Must be called while holding the LVGL adapter lock.
- if(aiAnim.sprite){lv_obj_delete(aiAnim.sprite);aiAnim.sprite=nullptr;}
+ if(aiAnim.sprite){
+  lv_anim_delete(aiAnim.sprite,aiAnimationFrame);
+  lv_obj_delete(aiAnim.sprite);
+  aiAnim.sprite=nullptr;
+ }
  if(aiAnim.active){
   int i=(aiAnim.move.from>>4)*8+(aiAnim.move.from&7);
   if(i>=0&&i<64)lv_obj_remove_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
  }
  aiAnim.active=false;
+ aiAnim.finished=false;
 }
 static void startAiAnimation(mcumax_move move){
  // This function is called with the LVGL lock already acquired.
@@ -236,8 +252,17 @@ static void startAiAnimation(mcumax_move move){
  lv_obj_remove_flag(aiAnim.sprite,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_move_foreground(aiAnim.sprite);
  lv_obj_add_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
- aiAnim.start=millis();
+ aiAnim.finished=false;
  aiAnim.active=true;
+ lv_anim_t motion;
+ lv_anim_init(&motion);
+ lv_anim_set_var(&motion,aiAnim.sprite);
+ lv_anim_set_values(&motion,0,1000);
+ lv_anim_set_duration(&motion,AI_MOVE_ANIMATION_MS);
+ lv_anim_set_exec_cb(&motion,aiAnimationFrame);
+ lv_anim_set_path_cb(&motion,lv_anim_path_linear);
+ lv_anim_set_completed_cb(&motion,aiAnimationReady);
+ lv_anim_start(&motion);
 }
 static void drawBoard(){
  const bool blackToMove=(mcumax_get_current_side()==0x10);
@@ -670,6 +695,7 @@ static void resetGame(){
  // The overlay is destroyed when the old screen is cleaned in createGameUI.
  aiAnim.active=false;
  aiAnim.sprite=nullptr;
+ aiAnim.finished=false;
  if(variant==VARIANT_SCRAMBLE)newScrambleFen();
  loadOpeningPosition();
  historyCount=0;selected=-1;awaitingAI=false;
@@ -831,34 +857,20 @@ void loop(){
    awaitingAI=false;selected=-1;refreshLegal();
   }
  }
- if(inGame&&!modeOverlay&&aiAnim.active){
-  const uint32_t elapsed=millis()-aiAnim.start;
-  const float t=(elapsed>=AI_MOVE_ANIMATION_MS)?1.0f:
-    (float)elapsed/(float)AI_MOVE_ANIMATION_MS;
-  // Smooth ease-out makes the destination obvious without a hard stop.
-  const float eased=t*t*(3.0f-2.0f*t);
-  if(t<1.0f){
-   if(esp_lv_adapter_lock(1000)==ESP_OK){
-    const int x=aiAnim.x0+(int)((aiAnim.x1-aiAnim.x0)*eased);
-    const int y=aiAnim.y0+(int)((aiAnim.y1-aiAnim.y0)*eased);
-    lv_obj_set_pos(aiAnim.sprite,x,y);
-    esp_lv_adapter_unlock();
-   }
-  }else{
-   const mcumax_move best=aiAnim.move;
-   // Apply the position first, then remove the overlay and redraw atomically.
-   const bool played=mcumax_play_move(best);
-   if(played){
-    if(historyCount<512)history[historyCount++]=best;
-    moveText(best,true);resolveSpyMove(best);
-   }else strcpy(lastText,"Computer could not find a move");
-   awaitingAI=false;selected=-1;refreshLegal();
-   if(esp_lv_adapter_lock(-1)==ESP_OK){
-    clearAiAnimation();
-    drawBoard();
-    showEndModal();
-    esp_lv_adapter_unlock();
-   }
+ if(inGame&&!modeOverlay&&aiAnim.active&&aiAnim.finished){
+  const mcumax_move best=aiAnim.move;
+  // LVGL delivered the final frame. Now commit the engine state.
+  const bool played=mcumax_play_move(best);
+  if(played){
+   if(historyCount<512)history[historyCount++]=best;
+   moveText(best,true);resolveSpyMove(best);
+  }else strcpy(lastText,"Computer could not find a move");
+  awaitingAI=false;selected=-1;refreshLegal();
+  if(esp_lv_adapter_lock(-1)==ESP_OK){
+   clearAiAnimation();
+   drawBoard();
+   showEndModal();
+   esp_lv_adapter_unlock();
   }
  }
  delay(12);
