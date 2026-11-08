@@ -10,7 +10,7 @@ using namespace esp_panel::board;
 
 static lv_obj_t *cells[64], *pieces[64], *moveDots[64], *statusLabel, *modeLabel, *levelLabel, *lastLabel, *undoButton;
 static bool inGame=false;
-enum GameVariant : uint8_t { VARIANT_STANDARD=0, VARIANT_KNIGHTS=1, VARIANT_PAWNS=2, VARIANT_SPY=3 };
+enum GameVariant : uint8_t { VARIANT_STANDARD=0, VARIANT_KNIGHTS=1, VARIANT_PAWNS=2, VARIANT_SPY=3, VARIANT_SCRAMBLE=4 };
 static GameVariant variant=VARIANT_STANDARD;
 static lv_obj_t *modeOverlay=nullptr, *endOverlay=nullptr;
 enum EndReason : uint8_t { END_NONE=0, END_CHECKMATE, END_STALEMATE, END_INFILTRATION, END_EXPOSED };
@@ -22,7 +22,7 @@ static lv_obj_t *turnFrame[2]={nullptr,nullptr};
 static lv_obj_t *spyPips[2][3]={{nullptr,nullptr,nullptr},{nullptr,nullptr,nullptr}};
 static uint8_t renderedSpyChecks[2]={255,255};
 static int8_t renderedTurn=-1;
-static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":variant==VARIANT_SPY?"SPY KINGS":"STANDARD";}
+static const char *variantName(){return variant==VARIANT_KNIGHTS?"KNIGHTS ONLY":variant==VARIANT_PAWNS?"PAWNS ONLY":variant==VARIANT_SPY?"SPY KINGS":variant==VARIANT_SCRAMBLE?"SCRAMBLE CITY":"STANDARD";}
 static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
@@ -34,6 +34,7 @@ static uint32_t validCount=0;
 static mcumax_move history[512];
 static int historyCount=0;
 static char lastText[56]="Tap a piece to begin";
+static char scrambleFen[96]={0}; // Keep the exact opening position for Undo.
 static uint8_t renderedPiece[64];
 static uint32_t renderedColor[64];
 static uint8_t renderedDot[64];
@@ -353,10 +354,11 @@ static void openSelectionModal(){
   newButton(panel,48,191,292,55,"INTERMEDIATE",17);
   newButton(panel,48,254,292,55,"MAX ENGINE",18);
  }else{
-  newButton(panel,48,66,292,53,"STANDARD",11);
-  newButton(panel,48,126,292,53,"KNIGHTS ONLY",12);
-  newButton(panel,48,186,292,53,"PAWNS ONLY",13);
-  newButton(panel,48,246,292,53,"SPY KINGS",19);
+  newButton(panel,48,64,292,48,"STANDARD",11);
+  newButton(panel,48,120,292,48,"KNIGHTS ONLY",12);
+  newButton(panel,48,176,292,48,"PAWNS ONLY",13);
+  newButton(panel,48,232,292,48,"SPY KINGS",19);
+  newButton(panel,48,288,292,48,"SCRAMBLE CITY",20);
  }
  newButton(panel,76,362,236,52,"CANCEL",14);
 }
@@ -568,15 +570,50 @@ static void createHome(){
  newButton(screen,466,160,276,72,"1 PLAYER",5);
  newButton(screen,466,275,276,72,"2 PLAYERS",6);
 }
-static void resetGame(){
- if(!vsAI&&variant==VARIANT_KNIGHTS){
-  // Kings and 15 knights per side. No castling.
+// Uniformly sample one of the 960 classical Chess960 back ranks.
+// White and Black are sampled independently in Scramble City.
+// Only the back-rank placement is borrowed; castling is never available.
+static void scrambleRank(char out[9]){
+ for(int i=0;i<8;i++)out[i]='.';
+ out[8]=0;
+ const int dark=2*(int)random(4), light=2*(int)random(4)+1;
+ out[dark]='B';out[light]='B';
+ int freeSq[8],n=0;
+ for(int i=0;i<8;i++)if(out[i]=='.')freeSq[n++]=i;
+ int choice=(int)random(n);
+ out[freeSq[choice]]='Q';
+ n=0;for(int i=0;i<8;i++)if(out[i]=='.')freeSq[n++]=i;
+ choice=(int)random(n);
+ out[freeSq[choice]]='N';
+ n=0;for(int i=0;i<8;i++)if(out[i]=='.')freeSq[n++]=i;
+ choice=(int)random(n);
+ out[freeSq[choice]]='N';
+ n=0;for(int i=0;i<8;i++)if(out[i]=='.')freeSq[n++]=i;
+ // These are sorted by file: R-K-R guarantees the king between rooks.
+ out[freeSq[0]]='R';out[freeSq[1]]='K';out[freeSq[2]]='R';
+}
+static void newScrambleFen(){
+ char white[9],black[9];
+ scrambleRank(white);
+ scrambleRank(black);
+ for(int i=0;i<8;i++)black[i]=(char)tolower((unsigned char)black[i]);
+ // '-' explicitly removes all castling rights for both independently
+ // scrambled armies. Pawns still occupy their usual starting ranks.
+ snprintf(scrambleFen,sizeof(scrambleFen),
+   "%s/pppppppp/8/8/8/8/PPPPPPPP/%s w - - 0 1",black,white);
+}
+static void loadOpeningPosition(){
+ if(!vsAI&&variant==VARIANT_KNIGHTS)
   mcumax_set_fen_position("nnnnknnn/nnnnnnnn/8/8/8/8/NNNNNNNN/NNNNKNNN w - - 0 1");
- }else if(!vsAI&&variant==VARIANT_PAWNS){
-  // Kings and 15 pawns per side. Rear-rank pawns advance after
-  // the normal pawns clear the way. No castling.
+ else if(!vsAI&&variant==VARIANT_PAWNS)
   mcumax_set_fen_position("ppppkppp/pppppppp/8/8/8/8/PPPPPPPP/PPPPKPPP w - - 0 1");
- }else mcumax_init();
+ else if(!vsAI&&variant==VARIANT_SCRAMBLE)
+  mcumax_set_fen_position(scrambleFen);
+ else mcumax_init();
+}
+static void resetGame(){
+ if(!vsAI&&variant==VARIANT_SCRAMBLE)newScrambleFen();
+ loadOpeningPosition();
  historyCount=0;selected=-1;awaitingAI=false;
  endReason=END_NONE;winnerSide=-1;spyChecks[0]=spyChecks[1]=0;endModalShown=false;
  strcpy(lastText,"Tap a piece to begin");
@@ -586,7 +623,7 @@ static void undoMove(){
  if(historyCount<=0)return;
  int undo=vsAI?(historyCount>=2?2:1):1;
  historyCount-=undo;
- mcumax_init();
+ loadOpeningPosition();
  for(int i=0;i<historyCount;i++)mcumax_play_move(history[i]);
  selected=-1;awaitingAI=false;
  strcpy(lastText,"Move undone");
@@ -670,9 +707,9 @@ void loop(){
     closeModeModal();
     esp_lv_adapter_unlock();
    }
-  }else if(modeOverlay&&((vsAI&&a>=15&&a<=18)||(!vsAI&&((a>=11&&a<=13)||a==19)))){
+  }else if(modeOverlay&&((vsAI&&a>=15&&a<=18)||(!vsAI&&((a>=11&&a<=13)||a==19||a==20)))){
    if(vsAI)level=(uint8_t)(a-14);
-   else variant=(a==19)?VARIANT_SPY:(GameVariant)(a-11);
+   else variant=(a==19)?VARIANT_SPY:(a==20)?VARIANT_SCRAMBLE:(GameVariant)(a-11);
    resetGame();
    if(esp_lv_adapter_lock(1000)==ESP_OK){
     createGameUI();
