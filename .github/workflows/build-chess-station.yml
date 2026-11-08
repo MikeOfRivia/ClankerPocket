@@ -52,12 +52,17 @@ jobs:
             /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
             sketch/ChessStation/chess_piece_images.cpp
           grep -q 'chess_piece_images' sketch/ChessStation/chess_piece_images.cpp
+          python3 chess-station/pack-photo-assets.py chess-station/assets sketch/ChessStation/treasure_images.cpp
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl
           find deps/lvgl -name '*.S' -type f -delete
           cp deps/lvgl/lv_conf_template.h deps/lv_conf.h
           sed -i 's/^#if 0 \/\* Set this to "1" to enable content \*\//#if 1 \/\* Set this to "1" to enable content \*\//' deps/lv_conf.h
           sed -i 's/^#define LV_FONT_MONTSERRAT_24 0/#define LV_FONT_MONTSERRAT_24 1/' deps/lv_conf.h
           sed -i 's/^#define LV_FONT_MONTSERRAT_28 0/#define LV_FONT_MONTSERRAT_28 1/' deps/lv_conf.h
+          sed -i 's/^#define LV_USE_TJPGD 0/#define LV_USE_TJPGD 1/' deps/lv_conf.h
+          sed -i 's/^#define LV_USE_FS_MEMFS 0/#define LV_USE_FS_MEMFS 1/' deps/lv_conf.h
+          grep -q '^#define LV_USE_TJPGD 1' deps/lv_conf.h
+          grep -q '^#define LV_USE_FS_MEMFS 1' deps/lv_conf.h
           grep -q '^#define ESP_OPEN_TOUCH 1' sketch/ChessStation/esp_panel_board_custom_conf.h
 
       - name: Compile Chess Station
@@ -106,14 +111,14 @@ jobs:
           Write-Host 'Chess Station flashed. Press RESET to start.' -ForegroundColor Green
           PS1
           cat > firmware/README.txt <<'EOF'
-          CHESS STATION - Waveshare ESP32-S3-Touch-LCD-7 (800x480)
+          KNIGHT FAMILY GAME TREASURES - Waveshare ESP32-S3-Touch-LCD-7
           Extract this ZIP, open PowerShell in the folder, then:
             Set-ExecutionPolicy -Scope Process Bypass -Force
             .\flash.ps1 -Port COM3
           Press RESET after flashing.
           Includes mcu-max chess engine (MIT license).
           Onboard AI, two-player mode, 4 difficulty levels, undo, legal moves.
-          Chess glyphs, blue legal-move dots, red capture highlights.
+          Wooden chest launcher, wooden game trays, Bang Bot, seven games.
           MVP limitation: engine defaults to queen promotion (no underpromotion).
           No local compilation required.
           EOF
