@@ -148,14 +148,83 @@ static void checkerSelect(int i){
  if(chosen>=0&&checkerCanMove(chosen,i)){checkerMove(chosen,i);return;}
  if(checkerSide(checkers[i])==turn){chosen=i;strcpy(message,checkerAnyJump()?"CAPTURE IS MANDATORY":"SELECT DESTINATION");}
 }
+// Lightweight minimax over the SAME mandatory-capture/multi-jump rules as
+// the human game. Depth and a hard node budget keep touch response reasonable.
+struct CheckersSnapshot {
+ int8_t board[64];uint8_t turn;int chain,chosen;bool done;char message[96];
+};
+static CheckersSnapshot checkerSnapshot(){
+ CheckersSnapshot s;
+ memcpy(s.board,checkers,sizeof(checkers));
+ s.turn=turn;s.chain=chain;s.chosen=chosen;s.done=done;
+ memcpy(s.message,message,sizeof(message));
+ return s;
+}
+static void checkerRestore(const CheckersSnapshot &s){
+ memcpy(checkers,s.board,sizeof(checkers));turn=s.turn;
+ chain=s.chain;chosen=s.chosen;done=s.done;
+ memcpy(message,s.message,sizeof(message));
+}
+static int checkerScore(){
+ if(done)return turn==1?20000:-20000;
+ int score=0;
+ for(int i=0;i<64;i++){
+  const int p=checkers[i];if(!p)continue;
+  int r=i/8,col=i%8;
+  int value=(abs(p)==2?175:100);
+  if(abs(p)==1)value+=(p<0?r:7-r)*5;
+  if(col>=2&&col<=5)value+=7;
+  score+=(p<0?value:-value);
+ }
+ return score;
+}
+static int checkerSearch(int depth,int alpha,int beta,int &budget){
+ if(depth<=0||done||budget<=0)return checkerScore();
+ budget--;
+ uint8_t sources[128],destinations[128];int count=0;
+ for(int i=0;i<64;i++)if(checkerSide(checkers[i])==turn)
+  for(int j=0;j<64;j++)if(checkerCanMove(i,j)&&count<128){
+   sources[count]=(uint8_t)i;destinations[count]=(uint8_t)j;count++;
+  }
+ if(!count)return turn==2?-20000:20000;
+ bool maxing=(turn==2);
+ int best=maxing?-30000:30000;
+ for(int k=0;k<count;k++){
+  CheckersSnapshot saved=checkerSnapshot();
+  checkerMove(sources[k],destinations[k]);
+  int value=checkerSearch(depth-1,alpha,beta,budget);
+  checkerRestore(saved);
+  if(maxing){if(value>best)best=value;if(best>alpha)alpha=best;}
+  else {if(value<best)best=value;if(best<beta)beta=best;}
+  if(beta<=alpha||budget<=0)break;
+ }
+ return best;
+}
 static void checkerAI(){
+ // Continue a multi-capture chain until the opponent's turn begins.
  for(int safety=0;safety<24&&!done&&turn==2;safety++){
-  int src[256],dst[256],count=0;
+  uint8_t src[128],dst[128];int count=0;
   for(int f=0;f<64;f++)if(checkerSide(checkers[f])==2)
-   for(int t=0;t<64;t++)if(checkerCanMove(f,t)&&count<256){src[count]=f;dst[count]=t;count++;}
+   for(int t=0;t<64;t++)if(checkerCanMove(f,t)&&count<128){
+    src[count]=(uint8_t)f;dst[count]=(uint8_t)t;count++;
+   }
   if(!count){done=true;strcpy(message,"WHITE WINS");break;}
-  int k=(int)random(count);
-  checkerMove(src[k],dst[k]);
+  int best=(int)random(count);
+  if(difficulty>0){
+   const int depth=difficulty==1?2:4;
+   int budget=difficulty==1?1000:3600;
+   int bestScore=-30000;
+   for(int k=0;k<count;k++){
+    CheckersSnapshot saved=checkerSnapshot();
+    checkerMove(src[k],dst[k]);
+    int score=checkerSearch(depth-1,-30000,30000,budget);
+    checkerRestore(saved);
+    score+=(int)random(3);
+    if(score>bestScore){bestScore=score;best=k;}
+    if(budget<=0)break;
+   }
+  }
+  checkerMove(src[best],dst[best]);
  }
 }
 static void showCheckers(){
@@ -190,6 +259,7 @@ static void showCheckers(){
   }
  }
  label(25,185,solo?"YOU: WHITE\nCPU: RED":"WHITE vs RED");
+ if(solo)label(25,235,difficulty==0?"AI: EASY":difficulty==1?"AI: MEDIUM":"AI: HARD");
  label(25,260,"Captures mandatory.\nMulti-jumps enforced.");
 }
 static bool c4Win(int side){
