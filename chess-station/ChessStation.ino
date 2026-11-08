@@ -32,6 +32,7 @@ static uint8_t arcadeChoice=0;
 static bool launcherVisible=false;
 static volatile int queuedPageSwipe=0;
 static void createLauncher();
+static void createSplash();
 static void createArcadeChoice();
 static void launcherGesture(lv_event_t *e){
  if(!launcherVisible||lv_event_get_code(e)!=LV_EVENT_GESTURE)return;
@@ -60,6 +61,7 @@ static uint32_t renderedColor[64];
 static uint8_t renderedDot[64];
 extern const lv_image_dsc_t chess_piece_images[24];
 extern const lv_image_dsc_t chess_logo;
+extern const lv_image_dsc_t treasure_images[4];
 extern const lv_image_dsc_t chess_rotated_buttons[2];
 // Level 1-3 are deliberately weakened: shallow search alone is still very
 // unforgiving at beginner ratings. No Elo claim without actual calibration.
@@ -366,16 +368,16 @@ static lv_obj_t *newButton(lv_obj_t *parent,int x,int y,int w,int h,const char *
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);
  lv_obj_set_style_radius(b,3,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x0B2417),0);
- lv_obj_set_style_border_color(b,lv_color_hex(0x56FF73),0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x392313),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(0xB78A43),0);
  lv_obj_set_style_border_width(b,2,0);
  lv_obj_set_style_shadow_width(b,0,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x17552D),LV_STATE_PRESSED);
- lv_obj_set_style_text_color(b,lv_color_hex(0x98FFAA),0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x6D4723),LV_STATE_PRESSED);
+ lv_obj_set_style_text_color(b,lv_color_hex(0xF5DEAE),0);
  lv_obj_add_event_cb(b,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
  lv_obj_t *l=lv_label_create(b);
  lv_label_set_text(l,caption);
- lv_obj_set_style_text_color(l,lv_color_hex(0xA8FFB9),0);
+ lv_obj_set_style_text_color(l,lv_color_hex(0xF5DEAE),0);
  lv_obj_center(l);
  return b;
 }
@@ -641,45 +643,55 @@ static void createGameUI(){
 
 // Board Station launcher is the boot screen. This keeps chess' existing
 // player/mode/difficulty flow intact behind the CHESS tile.
+static void chestImage(int imageIndex){
+ lv_obj_t *bg=lv_image_create(lv_screen_active());
+ lv_image_set_src(bg,&treasure_images[imageIndex]);
+ lv_obj_set_pos(bg,0,0);
+ lv_obj_remove_flag(bg,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_move_background(bg);
+}
+static void chestHit(int x,int y,int w,int h,int action,bool active=true){
+ lv_obj_t *hit=lv_obj_create(lv_screen_active());
+ lv_obj_set_pos(hit,x,y);lv_obj_set_size(hit,w,h);
+ lv_obj_set_style_bg_opa(hit,LV_OPA_TRANSP,0);
+ lv_obj_set_style_border_width(hit,0,0);
+ lv_obj_set_style_shadow_width(hit,0,0);
+ lv_obj_set_style_pad_all(hit,0,0);
+ lv_obj_set_style_radius(hit,0,0);
+ lv_obj_remove_flag(hit,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_add_flag(hit,LV_OBJ_FLAG_GESTURE_BUBBLE);
+ if(active)lv_obj_add_event_cb(hit,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
+ else lv_obj_remove_flag(hit,LV_OBJ_FLAG_CLICKABLE);
+}
+static void createSplash(){
+ clearAiAnimation();
+ awaitingAI=false;inGame=false;arcade::game=arcade::NONE;
+ launcherVisible=false;arcadeChoice=0;
+ modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
+ lv_obj_clean(lv_screen_active());screen=lv_screen_active();
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x25160D),0);
+ lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
+ chestImage(0);
+ chestHit(0,0,800,480,50);
+}
 static void createLauncher(){
  clearAiAnimation();
  awaitingAI=false;inGame=false;arcade::game=arcade::NONE;
- launcherVisible=true;
+ launcherVisible=true;arcadeChoice=0;
  modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
- lv_obj_clean(lv_screen_active());
- screen=lv_screen_active();
- lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
+ lv_obj_clean(lv_screen_active());screen=lv_screen_active();
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x25160D),0);
  lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_remove_event_cb(screen,launcherGesture);
  lv_obj_add_event_cb(screen,launcherGesture,LV_EVENT_GESTURE,nullptr);
- lv_obj_t *title=lv_label_create(screen);
- lv_label_set_text(title,"BOARD STATION");
- lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
- lv_obj_set_style_text_color(title,lv_color_hex(0x77FF99),0);
- lv_obj_align(title,LV_ALIGN_TOP_MID,0,12);
- static const char *names[]={"CHESS","CHECKERS","CONNECT FOUR","HANGBOT",
-  "DOTS & BOXES","MASTERMIND","SOS","OPEN SLOT"};
- static const char *sub[]={"FIVE VARIANTS","CAPTURE THE KINGS","FOUR IN A ROW","GUESS THE WORD",
-  "CLAIM THE BOXES","CRACK THE CODE","SPELL TO SCORE","NEXT GAME"};
+ chestImage(launcherPage==0?1:2);
  for(int i=0;i<4;i++){
-  const int slot=launcherPage*4+i;
-  const int x=20+(i%2)*390,y=62+(i/2)*195;
-  lv_obj_t *tile=newButton(screen,x,y,370,180,names[slot],30+slot);
-  if(slot==7)lv_obj_remove_flag(tile,LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(tile,LV_OBJ_FLAG_GESTURE_BUBBLE);
-  lv_obj_t *t=lv_label_create(tile);
-  lv_label_set_text(t,sub[slot]);
-  lv_obj_set_style_text_color(t,lv_color_hex(0x689C75),0);
-  lv_obj_align(t,LV_ALIGN_BOTTOM_MID,0,-25);
-  lv_obj_t *main=lv_obj_get_child(tile,0);
-  lv_obj_set_style_text_font(main,&lv_font_montserrat_24,0);
-  lv_obj_align(main,LV_ALIGN_CENTER,0,-12);
+  int slot=launcherPage*4+i;
+  int x=(i%2)*400,y=(i/2)*240;
+  chestHit(x+25,y+20,350,195,30+slot,slot<7);
  }
- lv_obj_t *footer=lv_label_create(screen);
- lv_label_set_text(footer,launcherPage==0?
-  "01 / 02      SWIPE LEFT FOR MORE  >":"<  SWIPE RIGHT      02 / 02");
- lv_obj_set_style_text_color(footer,lv_color_hex(0x659373),0);
- lv_obj_align(footer,LV_ALIGN_BOTTOM_MID,0,-4);
+ if(launcherPage==0)chestHit(760,180,40,110,52);
+ if(launcherPage==1)chestHit(0,180,40,110,53);
 }
 static void createArcadeChoice(){
  launcherVisible=false;
@@ -838,9 +850,9 @@ void setup(){
  ESP_ERROR_CHECK(esp_lv_adapter_start());
  mcumax_init();refreshLegal();
  ESP_ERROR_CHECK(esp_lv_adapter_lock(-1));
- createLauncher();
+ createSplash();
  esp_lv_adapter_unlock();
- Serial.println("Chess Station ready");
+ Serial.println("Knight Family Game Treasures ready");
 }
 void loop(){
  const int a=queuedAction;
@@ -859,6 +871,15 @@ void loop(){
   }
  }
  if(a){
+  if(a==50){
+   if(esp_lv_adapter_lock(1000)==ESP_OK){
+    launcherPage=0;createLauncher();esp_lv_adapter_unlock();
+   }
+  }else if(a==52||a==53){
+   if(launcherVisible&&esp_lv_adapter_lock(1000)==ESP_OK){
+    launcherPage=(a==52)?1:0;createLauncher();esp_lv_adapter_unlock();
+   }
+  }else
   // Launcher selection and mini-game player-count selection.
   if(a>=30&&a<=36){
    if(esp_lv_adapter_lock(1000)==ESP_OK){
