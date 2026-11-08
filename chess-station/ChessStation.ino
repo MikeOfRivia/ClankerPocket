@@ -29,22 +29,16 @@ static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
 static uint8_t launcherPage=0;
 static uint8_t arcadeChoice=0;
-static int16_t launcherTouchX=0;
-static bool launcherTouchDown=false;
+static bool launcherVisible=false;
+static volatile int queuedPageSwipe=0;
 static void createLauncher();
 static void createArcadeChoice();
 static void launcherGesture(lv_event_t *e){
- if(lv_event_get_code(e)==LV_EVENT_GESTURE){
-  lv_indev_t *indev=lv_indev_active();
-  if(!indev)return;
-  const lv_dir_t dir=lv_indev_get_gesture_dir(indev);
-  // Four tiles per page. The next page appears only when it contains games.
-  const uint8_t pages=1;
-  if(dir==LV_DIR_LEFT&&launcherPage+1<pages)launcherPage++;
-  else if(dir==LV_DIR_RIGHT&&launcherPage>0)launcherPage--;
-  else return;
-  createLauncher();
- }
+ if(!launcherVisible||lv_event_get_code(e)!=LV_EVENT_GESTURE)return;
+ lv_indev_t *indev=lv_indev_active();if(!indev)return;
+ const lv_dir_t d=lv_indev_get_gesture_dir(indev);
+ if(d==LV_DIR_LEFT)queuedPageSwipe=1;
+ else if(d==LV_DIR_RIGHT)queuedPageSwipe=-1;
 }
 static bool vsAI=true, awaitingAI=false, gameOver=false;
 // The engine stays on its pre-move board while a temporary LVGL sprite travels.
@@ -518,6 +512,7 @@ static void showEndModal(){
 }
 
 static void createGameUI(){
+ launcherVisible=false;
  clearAiAnimation();
  inGame=true;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;
@@ -649,24 +644,31 @@ static void createGameUI(){
 static void createLauncher(){
  clearAiAnimation();
  awaitingAI=false;inGame=false;arcade::game=arcade::NONE;
+ launcherVisible=true;
  modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
  lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
+ lv_obj_remove_event_cb(screen,launcherGesture);
  lv_obj_add_event_cb(screen,launcherGesture,LV_EVENT_GESTURE,nullptr);
  lv_obj_t *title=lv_label_create(screen);
  lv_label_set_text(title,"BOARD STATION");
  lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
  lv_obj_set_style_text_color(title,lv_color_hex(0x77FF99),0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,12);
- static const char *names[]={"CHESS","CHECKERS","CONNECT FOUR","HANGBOT"};
- static const char *sub[]={"FIVE VARIANTS","CAPTURE THE KINGS","FOUR IN A ROW","GUESS THE WORD"};
+ static const char *names[]={"CHESS","CHECKERS","CONNECT FOUR","HANGBOT",
+  "DOTS & BOXES","MASTERMIND","SOS","OPEN SLOT"};
+ static const char *sub[]={"FIVE VARIANTS","CAPTURE THE KINGS","FOUR IN A ROW","GUESS THE WORD",
+  "CLAIM THE BOXES","CRACK THE CODE","SPELL TO SCORE","NEXT GAME"};
  for(int i=0;i<4;i++){
+  const int slot=launcherPage*4+i;
   const int x=20+(i%2)*390,y=62+(i/2)*195;
-  lv_obj_t *tile=newButton(screen,x,y,370,180,names[i],30+i);
+  lv_obj_t *tile=newButton(screen,x,y,370,180,names[slot],30+slot);
+  if(slot==7)lv_obj_remove_flag(tile,LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(tile,LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_t *t=lv_label_create(tile);
-  lv_label_set_text(t,sub[i]);
+  lv_label_set_text(t,sub[slot]);
   lv_obj_set_style_text_color(t,lv_color_hex(0x689C75),0);
   lv_obj_align(t,LV_ALIGN_BOTTOM_MID,0,-25);
   lv_obj_t *main=lv_obj_get_child(tile,0);
@@ -674,17 +676,22 @@ static void createLauncher(){
   lv_obj_align(main,LV_ALIGN_CENTER,0,-12);
  }
  lv_obj_t *footer=lv_label_create(screen);
- lv_label_set_text(footer,"BOARD STATION     01 / 01");
+ lv_label_set_text(footer,launcherPage==0?
+  "01 / 02      SWIPE LEFT FOR MORE  >":"<  SWIPE RIGHT      02 / 02");
  lv_obj_set_style_text_color(footer,lv_color_hex(0x659373),0);
  lv_obj_align(footer,LV_ALIGN_BOTTOM_MID,0,-4);
 }
 static void createArcadeChoice(){
+ launcherVisible=false;
  lv_obj_clean(lv_screen_active());
  lv_obj_t *sc=lv_screen_active();
  lv_obj_set_style_bg_color(sc,lv_color_hex(0x050E0B),0);
  lv_obj_remove_flag(sc,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *title=lv_label_create(sc);
- lv_label_set_text(title,arcadeChoice==arcade::CHECKERS?"CHECKERS": "CONNECT FOUR");
+ const char *choiceName=arcadeChoice==arcade::CHECKERS?"CHECKERS":
+   arcadeChoice==arcade::CONNECT4?"CONNECT FOUR":
+   arcadeChoice==arcade::DOTS?"DOTS & BOXES":"SOS";
+ lv_label_set_text(title,choiceName);
  lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
  lv_obj_set_style_text_color(title,lv_color_hex(0x77FF99),0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,55);
@@ -693,6 +700,7 @@ static void createArcadeChoice(){
  newButton(sc,276,306,248,65,"BACK",7);
 }
 static void createHome(){
+ launcherVisible=false;
  clearAiAnimation();
  awaitingAI=false;
  inGame=false;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
@@ -716,6 +724,7 @@ static void createHome(){
  lv_obj_remove_flag(divider,LV_OBJ_FLAG_CLICKABLE);
  newButton(screen,466,160,276,72,"1 PLAYER",5);
  newButton(screen,466,275,276,72,"2 PLAYERS",6);
+ newButton(screen,501,398,206,55,"BOARD STATION",7);
 }
 // Uniformly sample one of the 960 classical Chess960 back ranks.
 // White and Black are sampled independently in Scramble City.
@@ -837,21 +846,35 @@ void loop(){
  const int a=queuedAction;
  const int sq=queuedSquare;
  const int mini=arcade::input;
+ const int swipe=queuedPageSwipe;
+ if(swipe)queuedPageSwipe=0;
  if(mini>=0)arcade::input=-1;
  if(a)queuedAction=0;
  if(sq>=0)queuedSquare=-1;
  bool dirty=false;
+ if(swipe&&launcherVisible){
+  int next=(int)launcherPage+swipe;
+  if(next>=0&&next<2&&esp_lv_adapter_lock(1000)==ESP_OK){
+   launcherPage=(uint8_t)next;createLauncher();esp_lv_adapter_unlock();
+  }
+ }
  if(a){
   // Launcher selection and mini-game player-count selection.
-  if(a>=30&&a<=33){
+  if(a>=30&&a<=36){
    if(esp_lv_adapter_lock(1000)==ESP_OK){
-    if(a==30)createHome(); // Chess uses its existing 1P/2P screen.
-    else if(a==33)arcade::start(arcade::HANGBOT,true);
-    else {arcadeChoice=(a==31)?arcade::CHECKERS:arcade::CONNECT4;createArcadeChoice();}
+    launcherVisible=false;
+    if(a==30)createHome();
+    else if(a==33||a==35)arcade::start(a==33?arcade::HANGBOT:arcade::MASTERMIND,true);
+    else {
+     arcadeChoice=(a==31)?arcade::CHECKERS:(a==32)?arcade::CONNECT4:
+        (a==34)?arcade::DOTS:arcade::SOS;
+     createArcadeChoice();
+    }
     esp_lv_adapter_unlock();
    }
   }else if((a==40||a==41)&&arcadeChoice!=0){
    if(esp_lv_adapter_lock(1000)==ESP_OK){
+    launcherVisible=false;
     arcade::start((arcade::Game)arcadeChoice,a==40);
     arcadeChoice=0;
     esp_lv_adapter_unlock();
