@@ -300,17 +300,17 @@ static void drawBoard(){
    renderedPiece[i]=p;
   }
   const bool dark=(((i>>3)+(i&7))&1);
-  uint32_t bg=dark?0x526858:0xA5B9A5;
+  uint32_t bg=dark?0x79563C:0xD9BD92;
   // Subtle last-move markers on BOTH origin and destination, including the
   // computer's reply. Derived from history so Undo and New Game stay correct.
   if(historyCount>0){
    const mcumax_move last=history[historyCount-1];
-   if(sq==last.from||sq==last.to)bg=dark?0x6D9874:0xC0D9B9;
+   if(sq==last.from||sq==last.to)bg=dark?0xAB8152:0xEFD29B;
   }
   // Capture squares are red, but the selected piece remains gold.
   const bool legalTarget=selected>=0&&canMove((uint8_t)selected,sq);
   const bool capture=legalTarget&&((p&7)!=MCUMAX_EMPTY);
-  if(selected==(int)sq)bg=0x58DF7A;
+  if(selected==(int)sq)bg=0xD4A54F;
   else if(capture)bg=0xBE4950;
   // Check highlights only the king. Checkmate highlights a full 3x3
   // cluster around the mated king (clipped at the board edges).
@@ -339,7 +339,7 @@ static void drawBoard(){
    if(renderedSpyChecks[side]==spyChecks[side])continue;
    for(int j=0;j<3;j++)if(spyPips[side][j])
     lv_obj_set_style_bg_color(spyPips[side][j],
-       lv_color_hex(j<spyChecks[side]?0xFF5663:0x19482E),0);
+       lv_color_hex(j<spyChecks[side]?0xFF5663:0x3B2616),0);
    renderedSpyChecks[side]=spyChecks[side];
   }
  }
@@ -392,10 +392,10 @@ static lv_obj_t *rotatedButton(lv_obj_t *parent,int x,int y,int graphic,int acti
  lv_obj_t *b=lv_button_create(parent);
  lv_obj_set_pos(b,x,y);lv_obj_set_size(b,66,182);
  lv_obj_set_style_radius(b,3,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x0B2417),0);
- lv_obj_set_style_border_color(b,lv_color_hex(0x56FF73),0);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x392313),0);
+ lv_obj_set_style_border_color(b,lv_color_hex(0xD4A968),0);
  lv_obj_set_style_border_width(b,2,0);
- lv_obj_set_style_bg_color(b,lv_color_hex(0x17552D),LV_STATE_PRESSED);
+ lv_obj_set_style_bg_color(b,lv_color_hex(0x6D4723),LV_STATE_PRESSED);
  lv_obj_set_style_shadow_width(b,0,0);
  lv_obj_add_event_cb(b,actionPressed,LV_EVENT_CLICKED,(void*)(uintptr_t)action);
  lv_obj_t *label=lv_image_create(b);
@@ -413,7 +413,7 @@ static void openSelectionModal(){
  lv_obj_set_style_radius(modeOverlay,0,0);
  lv_obj_set_style_pad_all(modeOverlay,0,0);
  lv_obj_set_style_border_width(modeOverlay,0,0);
- lv_obj_set_style_bg_color(modeOverlay,lv_color_hex(0x020805),0);
+ lv_obj_set_style_bg_color(modeOverlay,lv_color_hex(0x261709),0);
  lv_obj_set_style_bg_opa(modeOverlay,LV_OPA_90,0);
  lv_obj_add_flag(modeOverlay,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_remove_flag(modeOverlay,LV_OBJ_FLAG_SCROLLABLE);
@@ -421,15 +421,15 @@ static void openSelectionModal(){
  lv_obj_set_pos(panel,206,16);
  lv_obj_set_size(panel,388,448);
  lv_obj_set_style_radius(panel,5,0);
- lv_obj_set_style_bg_color(panel,lv_color_hex(0x071A10),0);
- lv_obj_set_style_border_color(panel,lv_color_hex(0x56FF73),0);
+ lv_obj_set_style_bg_color(panel,lv_color_hex(0x392416),0);
+ lv_obj_set_style_border_color(panel,lv_color_hex(0xD4A968),0);
  lv_obj_set_style_border_width(panel,2,0);
  lv_obj_set_style_shadow_width(panel,0,0);
  lv_obj_set_style_pad_all(panel,0,0);
  lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *title=lv_label_create(panel);
  lv_label_set_text(title,selectingDifficulty?"CHOOSE DIFFICULTY":"CHOOSE GAME MODE");
- lv_obj_set_style_text_color(title,lv_color_hex(0xA8FFB9),0);
+ lv_obj_set_style_text_color(title,lv_color_hex(0xF5DEAE),0);
  lv_obj_set_style_text_font(title,&lv_font_montserrat_24,0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,18);
  if(selectingDifficulty){
@@ -457,14 +457,14 @@ static void showEndModal(){
  lv_obj_set_style_radius(endOverlay,0,0);
  lv_obj_set_style_pad_all(endOverlay,0,0);
  lv_obj_set_style_border_width(endOverlay,0,0);
- lv_obj_set_style_bg_color(endOverlay,lv_color_hex(0x020805),0);
+ lv_obj_set_style_bg_color(endOverlay,lv_color_hex(0x261709),0);
  lv_obj_set_style_bg_opa(endOverlay,LV_OPA_90,0);
  lv_obj_remove_flag(endOverlay,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_add_flag(endOverlay,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_t *panel=lv_obj_create(endOverlay);
  lv_obj_set_pos(panel,192,54);lv_obj_set_size(panel,416,372);
- lv_obj_set_style_bg_color(panel,lv_color_hex(0x071A10),0);
- lv_obj_set_style_border_color(panel,lv_color_hex(0x56FF73),0);
+ lv_obj_set_style_bg_color(panel,lv_color_hex(0x392416),0);
+ lv_obj_set_style_border_color(panel,lv_color_hex(0xD4A968),0);
  lv_obj_set_style_border_width(panel,2,0);
  lv_obj_set_style_radius(panel,5,0);
  lv_obj_set_style_pad_all(panel,0,0);
@@ -477,13 +477,13 @@ static void showEndModal(){
  lv_label_set_text(title,headline);
  lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
  lv_obj_set_style_text_color(title,lv_color_hex(
-   (endReason==END_EXPOSED||endReason==END_CHECKMATE)?0xFF606A:0x70FF93),0);
+   (endReason==END_EXPOSED||endReason==END_CHECKMATE)?0xFF606A:0xDDBB80),0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,35);
  lv_obj_t *outcome=lv_label_create(panel);
  lv_obj_set_width(outcome,370);
  lv_label_set_long_mode(outcome,LV_LABEL_LONG_WRAP);
  lv_obj_set_style_text_align(outcome,LV_TEXT_ALIGN_CENTER,0);
- lv_obj_set_style_text_color(outcome,lv_color_hex(0xC8F9D4),0);
+ lv_obj_set_style_text_color(outcome,lv_color_hex(0xF1DDBB),0);
  lv_obj_set_style_text_font(outcome,&lv_font_montserrat_24,0);
  const char *who=winnerSide<0?"DRAW":winnerSide==0?"WHITE WINS":"BLACK WINS";
  lv_label_set_text(outcome,who);
@@ -492,7 +492,7 @@ static void showEndModal(){
  lv_obj_set_width(detail,370);
  lv_label_set_long_mode(detail,LV_LABEL_LONG_WRAP);
  lv_obj_set_style_text_align(detail,LV_TEXT_ALIGN_CENTER,0);
- lv_obj_set_style_text_color(detail,lv_color_hex(0x82B49A),0);
+ lv_obj_set_style_text_color(detail,lv_color_hex(0xC1A078),0);
  const char *description=endReason==END_INFILTRATION?"Enemy back rank reached":
     endReason==END_EXPOSED?"Third check: spy exposed":
     endReason==END_CHECKMATE?(variant==VARIANT_SPY?
@@ -506,7 +506,7 @@ static void showEndModal(){
   snprintf(stats,sizeof(stats),"CHECKS RECEIVED: WHITE %u/3  BLACK %u/3",
            (unsigned)spyChecks[0],(unsigned)spyChecks[1]);
   lv_label_set_text(counter,stats);
-  lv_obj_set_style_text_color(counter,lv_color_hex(0x9DECAC),0);
+  lv_obj_set_style_text_color(counter,lv_color_hex(0xE8C78F),0);
   lv_obj_align(counter,LV_ALIGN_TOP_MID,0,196);
  }
  newButton(panel,30,271,168,57,"NEW GAME",1);
@@ -525,7 +525,7 @@ static void createGameUI(){
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
  for(int i=0;i<64;i++){renderedPiece[i]=255;renderedColor[i]=0xFFFFFFFF;renderedDot[i]=255;}
  screen=lv_screen_active();
- lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x25160D),0);
  lv_obj_clear_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  if(!vsAI){
   // Labels are pre-rotated 90 degrees clockwise for White's viewpoint.
@@ -544,7 +544,7 @@ static void createGameUI(){
  lv_obj_set_style_pad_all(boardFrame,0,0);
  lv_obj_set_style_bg_opa(boardFrame,LV_OPA_TRANSP,0);
  lv_obj_set_style_border_width(boardFrame,2,0);
- lv_obj_set_style_border_color(boardFrame,lv_color_hex(0x26984B),0);
+ lv_obj_set_style_border_color(boardFrame,lv_color_hex(0xB38B4F),0);
  lv_obj_set_style_shadow_width(boardFrame,0,0);
  lv_obj_remove_flag(boardFrame,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_remove_flag(boardFrame,LV_OBJ_FLAG_SCROLLABLE);
@@ -583,7 +583,7 @@ static void createGameUI(){
   moveDots[i]=lv_obj_create(cells[i]);
   lv_obj_set_size(moveDots[i],16,16);
   lv_obj_set_style_radius(moveDots[i],LV_RADIUS_CIRCLE,0);
-  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0x27FB64),0);
+  lv_obj_set_style_bg_color(moveDots[i],lv_color_hex(0xD6AF65),0);
   lv_obj_set_style_bg_opa(moveDots[i],LV_OPA_COVER,0);
   lv_obj_set_style_border_width(moveDots[i],0,0);
   lv_obj_set_style_shadow_width(moveDots[i],0,0);
@@ -607,7 +607,7 @@ static void createGameUI(){
    lv_obj_set_style_border_side(turnFrame[side],(lv_border_side_t)(side==0?
        (LV_BORDER_SIDE_LEFT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM):
        (LV_BORDER_SIDE_RIGHT|LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM)),0);
-   lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0x56FF73),0);
+   lv_obj_set_style_border_color(turnFrame[side],lv_color_hex(0xD4A968),0);
    lv_obj_set_style_shadow_width(turnFrame[side],0,0);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_CLICKABLE);
    lv_obj_remove_flag(turnFrame[side],LV_OBJ_FLAG_SCROLLABLE);
@@ -619,7 +619,7 @@ static void createGameUI(){
    if(vsAI){
     lv_obj_t *who=lv_label_create(screen);
     lv_label_set_text(who,side==0?"WHITE CHECKS":"BLACK CHECKS");
-    lv_obj_set_style_text_color(who,lv_color_hex(0x9DECAC),0);
+    lv_obj_set_style_text_color(who,lv_color_hex(0xE8C78F),0);
     lv_obj_set_pos(who,40,357+side*55);
    }
    for(int j=0;j<3;j++){
@@ -631,7 +631,7 @@ static void createGameUI(){
    lv_obj_set_style_pad_all(pip,0,0);
    lv_obj_set_style_border_width(pip,1,0);
    lv_obj_set_style_border_color(pip,lv_color_hex(0x316444),0);
-   lv_obj_set_style_bg_color(pip,lv_color_hex(0x19482E),0);
+   lv_obj_set_style_bg_color(pip,lv_color_hex(0x3B2616),0);
    lv_obj_set_style_shadow_width(pip,0,0);
    lv_obj_remove_flag(pip,LV_OBJ_FLAG_CLICKABLE);
    lv_obj_remove_flag(pip,LV_OBJ_FLAG_SCROLLABLE);
@@ -697,7 +697,7 @@ static void createArcadeChoice(){
  launcherVisible=false;
  lv_obj_clean(lv_screen_active());
  lv_obj_t *sc=lv_screen_active();
- lv_obj_set_style_bg_color(sc,lv_color_hex(0x050E0B),0);
+ lv_obj_set_style_bg_color(sc,lv_color_hex(0x25160D),0);
  lv_obj_remove_flag(sc,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *title=lv_label_create(sc);
  const char *choiceName=arcadeChoice==arcade::CHECKERS?"CHECKERS":
@@ -705,7 +705,7 @@ static void createArcadeChoice(){
    arcadeChoice==arcade::DOTS?"DOTS & BOXES":"SOS";
  lv_label_set_text(title,choiceName);
  lv_obj_set_style_text_font(title,&lv_font_montserrat_28,0);
- lv_obj_set_style_text_color(title,lv_color_hex(0x77FF99),0);
+ lv_obj_set_style_text_color(title,lv_color_hex(0xF4D19B),0);
  lv_obj_align(title,LV_ALIGN_TOP_MID,0,55);
  newButton(sc,142,171,240,84,"1 PLAYER",40);
  newButton(sc,418,171,240,84,"2 PLAYERS",41);
@@ -736,7 +736,7 @@ static void createHome(){
  lv_obj_clean(lv_screen_active());
  screen=lv_screen_active();
  statusLabel=modeLabel=levelLabel=lastLabel=undoButton=nullptr;
- lv_obj_set_style_bg_color(screen,lv_color_hex(0x050E0B),0);
+ lv_obj_set_style_bg_color(screen,lv_color_hex(0x25160D),0);
  lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
  lv_obj_t *brand=lv_image_create(screen);
  lv_image_set_src(brand,&chess_logo);
@@ -745,7 +745,7 @@ static void createHome(){
  lv_obj_remove_flag(brand,LV_OBJ_FLAG_CLICKABLE);
  lv_obj_t *divider=lv_obj_create(screen);
  lv_obj_set_pos(divider,415,60);lv_obj_set_size(divider,2,360);
- lv_obj_set_style_bg_color(divider,lv_color_hex(0x164A29),0);
+ lv_obj_set_style_bg_color(divider,lv_color_hex(0x5A3A23),0);
  lv_obj_set_style_border_width(divider,0,0);
  lv_obj_set_style_radius(divider,0,0);
  lv_obj_set_style_pad_all(divider,0,0);
