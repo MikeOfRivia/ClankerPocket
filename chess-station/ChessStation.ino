@@ -27,6 +27,11 @@ static lv_obj_t *screen;
 static volatile int queuedSquare=-1;
 static volatile int queuedAction=0;
 static bool vsAI=true, awaitingAI=false, gameOver=false;
+// The engine stays on its pre-move board while a temporary LVGL sprite travels.
+// The actual move is committed only after the 300ms animation finishes.
+struct AiMoveAnimation { bool active=false; mcumax_move move={MCUMAX_SQUARE_INVALID,MCUMAX_SQUARE_INVALID}; lv_obj_t *sprite=nullptr; uint32_t start=0; int x0=0,y0=0,x1=0,y1=0; };
+static AiMoveAnimation aiAnim;
+static constexpr uint32_t AI_MOVE_ANIMATION_MS=300;
 static bool selectingDifficulty=false; // AI setup: mode first, then level.
 static uint8_t level=3; // Intermediate, intended as the user's starting difficulty
 static int selected=-1;
@@ -197,6 +202,43 @@ static int checkedKingSquare(){
  return -1;
 }
 
+// Screen-space centers match createGameUI's landscape 54px board cells.
+static void aiSpritePosition(uint8_t sq,int &x,int &y){
+ x=346+(sq&7)*54+5;
+ y=22+(sq>>4)*54+5;
+}
+static void clearAiAnimation(){
+ // Must be called while holding the LVGL adapter lock.
+ if(aiAnim.sprite){lv_obj_delete(aiAnim.sprite);aiAnim.sprite=nullptr;}
+ if(aiAnim.active){
+  int i=(aiAnim.move.from>>4)*8+(aiAnim.move.from&7);
+  if(i>=0&&i<64)lv_obj_remove_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
+ }
+ aiAnim.active=false;
+}
+static void startAiAnimation(mcumax_move move){
+ // This function is called with the LVGL lock already acquired.
+ clearAiAnimation();
+ aiAnim.move=move;
+ aiSpritePosition(move.from,aiAnim.x0,aiAnim.y0);
+ aiSpritePosition(move.to,aiAnim.x1,aiAnim.y1);
+ const mcumax_piece p=mcumax_get_piece(move.from);
+ const int spriteIndex=pieceSpriteIndex(p);
+ if(spriteIndex<0)return;
+ const int i=(move.from>>4)*8+(move.from&7);
+ aiAnim.sprite=lv_image_create(lv_screen_active());
+ if(!aiAnim.sprite)return;
+ lv_image_set_src(aiAnim.sprite,&chess_piece_images[spriteIndex]);
+ lv_obj_set_style_image_recolor_opa(aiAnim.sprite,LV_OPA_TRANSP,LV_PART_MAIN);
+ lv_obj_set_style_image_opa(aiAnim.sprite,LV_OPA_COVER,LV_PART_MAIN);
+ lv_obj_set_size(aiAnim.sprite,44,44);
+ lv_obj_set_pos(aiAnim.sprite,aiAnim.x0,aiAnim.y0);
+ lv_obj_remove_flag(aiAnim.sprite,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_move_foreground(aiAnim.sprite);
+ lv_obj_add_flag(pieces[i],LV_OBJ_FLAG_HIDDEN);
+ aiAnim.start=millis();
+ aiAnim.active=true;
+}
 static void drawBoard(){
  const bool blackToMove=(mcumax_get_current_side()==0x10);
  const int checkedKing=checkedKingSquare();
@@ -431,6 +473,7 @@ static void showEndModal(){
 }
 
 static void createGameUI(){
+ clearAiAnimation();
  inGame=true;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;
  for(int side=0;side<2;side++)for(int j=0;j<3;j++)spyPips[side][j]=nullptr;
@@ -557,6 +600,8 @@ static void createGameUI(){
 }
 
 static void createHome(){
+ clearAiAnimation();
+ awaitingAI=false;
  inGame=false;modeOverlay=nullptr;endOverlay=nullptr;endModalShown=false;
  turnFrame[0]=turnFrame[1]=nullptr;renderedTurn=-1;
  lv_obj_clean(lv_screen_active());
@@ -621,6 +666,10 @@ static void loadOpeningPosition(){
  else mcumax_init();
 }
 static void resetGame(){
+ // An open selection modal may replace an unfinished AI animation.
+ // The overlay is destroyed when the old screen is cleaned in createGameUI.
+ aiAnim.active=false;
+ aiAnim.sprite=nullptr;
  if(variant==VARIANT_SCRAMBLE)newScrambleFen();
  loadOpeningPosition();
  historyCount=0;selected=-1;awaitingAI=false;
@@ -758,16 +807,59 @@ void loop(){
   showEndModal();
   esp_lv_adapter_unlock();
  }
- if(inGame&&!modeOverlay&&awaitingAI){
+ if(inGame&&!modeOverlay&&awaitingAI&&!aiAnim.active){
   delay(60);
-  mcumax_move best=selectComputerMove();
-  if(best.from!=MCUMAX_SQUARE_INVALID&&mcumax_play_move(best)){
-   if(historyCount<512)history[historyCount++]=best;
-   moveText(best,true);
-   resolveSpyMove(best);
-  }else strcpy(lastText,"Computer could not find a move");
-  awaitingAI=false;selected=-1;refreshLegal();
-  if(esp_lv_adapter_lock(-1)==ESP_OK){drawBoard();showEndModal();esp_lv_adapter_unlock();}
+  const mcumax_move best=selectComputerMove();
+  if(best.from!=MCUMAX_SQUARE_INVALID&&best.to!=MCUMAX_SQUARE_INVALID){
+   // Show the departure square and animate a temporary sprite above the board.
+   // No engine state changes until the sprite reaches the destination.
+   if(esp_lv_adapter_lock(-1)==ESP_OK){
+    startAiAnimation(best);
+    esp_lv_adapter_unlock();
+   }
+   if(!aiAnim.active){
+    // Fallback for an unsupported sprite: always preserve game progress.
+    if(mcumax_play_move(best)){
+     if(historyCount<512)history[historyCount++]=best;
+     moveText(best,true);resolveSpyMove(best);
+    }
+    awaitingAI=false;selected=-1;refreshLegal();
+    if(esp_lv_adapter_lock(-1)==ESP_OK){drawBoard();showEndModal();esp_lv_adapter_unlock();}
+   }
+  }else{
+   strcpy(lastText,"Computer could not find a move");
+   awaitingAI=false;selected=-1;refreshLegal();
+  }
+ }
+ if(inGame&&!modeOverlay&&aiAnim.active){
+  const uint32_t elapsed=millis()-aiAnim.start;
+  const float t=(elapsed>=AI_MOVE_ANIMATION_MS)?1.0f:
+    (float)elapsed/(float)AI_MOVE_ANIMATION_MS;
+  // Smooth ease-out makes the destination obvious without a hard stop.
+  const float eased=t*t*(3.0f-2.0f*t);
+  if(t<1.0f){
+   if(esp_lv_adapter_lock(1000)==ESP_OK){
+    const int x=aiAnim.x0+(int)((aiAnim.x1-aiAnim.x0)*eased);
+    const int y=aiAnim.y0+(int)((aiAnim.y1-aiAnim.y0)*eased);
+    lv_obj_set_pos(aiAnim.sprite,x,y);
+    esp_lv_adapter_unlock();
+   }
+  }else{
+   const mcumax_move best=aiAnim.move;
+   // Apply the position first, then remove the overlay and redraw atomically.
+   const bool played=mcumax_play_move(best);
+   if(played){
+    if(historyCount<512)history[historyCount++]=best;
+    moveText(best,true);resolveSpyMove(best);
+   }else strcpy(lastText,"Computer could not find a move");
+   awaitingAI=false;selected=-1;refreshLegal();
+   if(esp_lv_adapter_lock(-1)==ESP_OK){
+    clearAiAnimation();
+    drawBoard();
+    showEndModal();
+    esp_lv_adapter_unlock();
+   }
+  }
  }
  delay(12);
 }
