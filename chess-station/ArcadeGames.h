@@ -468,6 +468,93 @@ static void bangPanel(int x,int y,int w,int h,uint32_t color,uint8_t opacity=LV_
  lv_obj_set_style_pad_all(b,0,0);
  lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
 }
+static lv_obj_t *robotMetal(int x,int y,int w,int h,uint32_t metal,uint32_t shine,
+                            bool round=false){
+ lv_obj_t *o=lv_obj_create(screen);
+ lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);
+ lv_obj_set_style_radius(o,round?LV_RADIUS_CIRCLE:7,0);
+ lv_obj_set_style_pad_all(o,0,0);
+ lv_obj_set_style_bg_color(o,lv_color_hex(metal),0);
+ lv_obj_set_style_bg_grad_color(o,lv_color_hex(shine),0);
+ lv_obj_set_style_bg_grad_dir(o,LV_GRAD_DIR_HOR,0);
+ lv_obj_set_style_border_color(o,lv_color_hex(0x4B3224),0);
+ lv_obj_set_style_border_width(o,2,0);
+ lv_obj_set_style_shadow_color(o,lv_color_hex(0x080605),0);
+ lv_obj_set_style_shadow_width(o,5,0);
+ lv_obj_set_style_shadow_ofs_y(o,2,0);
+ lv_obj_remove_flag(o,LV_OBJ_FLAG_CLICKABLE);
+ return o;
+}
+static void robotRivet(int x,int y){
+ robotMetal(x,y,7,7,0x886940,0xF0CB87,true);
+}
+static void robotSocket(int x,int y){
+ robotMetal(x,y,21,22,0x433A32,0xD9A15D,true);
+ robotMetal(x+6,y+6,9,10,0x191411,0x624E3A,true);
+}
+static void drawBangRobot(){
+ // The original baked-in robot is replaced by an assembled, independently
+ // damageable automaton. Every wrong guess physically removes a body part.
+ // The background is kept, but never used as a fake damage-state picture.
+ bangPanel(273,64,251,185,0x29190F);
+ robotMetal(276,66,244,181,0x34251A,0x5B3B24);
+ robotMetal(283,71,230,171,0x24170F,0x3D281B);
+ const int m=misses;
+ // Legs 1 and 2: intact shin/boot vanishes, exposing broken axle and socket.
+ for(int side=0;side<2;side++){
+  int x=345+side*82;
+  robotSocket(x+2,192);
+  if(m<=side){
+   robotMetal(x,202,27,28,0x786454,0xD7C3A0);
+   robotMetal(x-8,224,46,14,0x473C33,0xA2A092);
+   robotRivet(x+11,207);
+  }else{
+   robotMetal(x+7,208,11,9,0x5E412B,0xB97D3E);
+  }
+ }
+ // Arms 3 and 4: detached at the shoulder; remaining joint stays visible.
+ for(int side=0;side<2;side++){
+  int x=309+side*157;
+  robotSocket(x,148);
+  if(m<=2+side){
+   robotMetal(x+(side?3:-7),165,25,36,0x66594C,0xD7BA90);
+   robotMetal(x+(side?0:-8),198,33,16,0x4E4035,0xAB9B80);
+   robotRivet(x+8,173);
+  }else{
+   robotMetal(x+5,170,10,13,0x5A3828,0xE0A351);
+  }
+ }
+ // Body breach at hit 5: center plate falls away and gears are exposed.
+ robotMetal(353,142,109,67,0x5B4735,0xD2B48B);
+ if(m<5){
+  robotMetal(362,151,91,49,0x53646C,0xBCC6C6);
+  robotMetal(391,162,34,27,0xA28D62,0xF4DDA5,true);
+  robotMetal(402,171,11,10,0x43352A,0x6F5744,true);
+  robotRivet(367,156);robotRivet(443,156);
+ }else{
+  robotMetal(363,151,88,50,0x1A1715,0x5D4532);
+  for(int i=0;i<3;i++)robotMetal(370+i*27,157+(i%2)*12,24,23,
+    0xA87731,0xF6C77A,true);
+  robotMetal(394,185,44,7,0x6D301F,0xEC6A35);
+ }
+ // Head destruction at hit 6: head shell is gone. Only bare neck/wires remain.
+ robotMetal(389,126,36,21,0x564237,0xA18E78);
+ if(m<6){
+  robotMetal(366,79,82,56,0x56656D,0xC9CFCA);
+  robotMetal(373,90,68,28,0x211C18,0x574235);
+  for(int side=0;side<2;side++){
+   lv_obj_t *eye=robotMetal(383+side*34,96,14,12,0xC95827,0xFFDF7C,true);
+   (void)eye;
+  }
+  robotMetal(388,118,39,7,0x6D462F,0xCEAF83);
+  robotMetal(404,69,8,13,0x926F3B,0xEBC882);
+  robotMetal(398,61,19,13,0x9D793E,0xF5CE7B,true);
+ }else{
+  robotSocket(395,118);
+  robotMetal(379,105,9,29,0xA56935,0xF0C075);
+  robotMetal(432,102,8,24,0x9E3B28,0xEF8C42);
+ }
+}
 static void showHangbot(){
  screen=lv_screen_active();lv_obj_clean(screen);
  lv_obj_set_style_bg_color(screen,lv_color_hex(0x29170F),0);
@@ -476,7 +563,8 @@ static void showHangbot(){
  lv_image_set_src(bg,&treasure_images[3]);
  lv_obj_set_pos(bg,0,0);
  lv_obj_remove_flag(bg,LV_OBJ_FLAG_CLICKABLE);
- // Opaque label area covers the placeholder answer rendered in the artwork.
+ drawBangRobot();
+ // Cover the artwork's hardcoded demo word with live guess state.
  bangPanel(203,252,382,49,0xAE7844);
  char shown[80]={0};int j=0;
  for(const char *p=word;*p&&j<76;p++){
@@ -488,35 +576,16 @@ static void showHangbot(){
  lv_obj_set_style_text_font(answer,&lv_font_montserrat_24,0);
  lv_obj_set_style_text_color(answer,lv_color_hex(0x2D1B0C),0);
  lv_obj_align(answer,LV_ALIGN_TOP_MID,0,260);
- // The supplied illustration includes two demo damage Xs: hide them and
- // render the actual current state, in the specified six-step order.
- bangPanel(723,55,35,201,0x2D1C12);
- static const char *parts[]={"LEFT LEG","RIGHT LEG","LEFT ARM","RIGHT ARM","TORSO","HEAD"};
- static const int px[]={340,434,304,483,392,409};
- static const int py[]={222,222,166,170,155,83};
- for(int i=0;i<6;i++){
-  if(i<misses){
-   lv_obj_t *status=lv_label_create(screen);
-   lv_label_set_text(status,"X");
-   lv_obj_set_style_text_font(status,&lv_font_montserrat_24,0);
-   lv_obj_set_style_text_color(status,lv_color_hex(0xEE4336),0);
-   lv_obj_set_pos(status,727,55+i*34);
-   lv_obj_t *damage=lv_label_create(screen);
-   lv_label_set_text(damage,"X");
-   lv_obj_set_style_text_font(damage,&lv_font_montserrat_28,0);
-   lv_obj_set_style_text_color(damage,lv_color_hex(0xF94A25),0);
-   lv_obj_set_pos(damage,px[i]-12,py[i]-17);
-   lv_obj_remove_flag(damage,LV_OBJ_FLAG_CLICKABLE);
-  }
- }
- if(misses>0){
-  bangPanel(68,95,182,79,0x392416);
-  char impact[48];
-  snprintf(impact,sizeof(impact),"%s HIT!",parts[misses-1]);
-  lv_obj_t *impactLabel=lv_label_create(screen);
-  lv_label_set_text(impactLabel,impact);
-  lv_obj_set_style_text_color(impactLabel,lv_color_hex(0xFFCC86),0);
-  lv_obj_set_pos(impactLabel,82,122);
+ // No red Xs: six misses now break actual legs, arms, chassis, and head.
+ bangPanel(686,74,79,173,0x2D1C12);
+ static const char *damageNames[]={"LEFT LEG LOST","RIGHT LEG LOST","LEFT ARM LOST",
+  "RIGHT ARM LOST","TORSO BREACHED","HEAD DESTROYED"};
+ if(misses){
+  bangPanel(42,92,193,61,0x392416);
+  lv_obj_t *status=lv_label_create(screen);
+  lv_label_set_text(status,damageNames[misses-1]);
+  lv_obj_set_style_text_color(status,lv_color_hex(0xFFCB83),0);
+  lv_obj_set_pos(status,51,113);
  }
  if(done){
   bangPanel(210,250,374,52,0x986237);
@@ -536,6 +605,7 @@ static void showHangbot(){
  bangBotHit(37,393,91,62,900);
  bangBotHit(658,387,111,70,901);
 }
+
 static int dotsEdgeCount(){return 40;}
 static int dotsBoxEdge(int row,int col,int side){
  // Horizontal edges 0..19 (5 rows x 4 columns).
