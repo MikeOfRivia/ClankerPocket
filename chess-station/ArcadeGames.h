@@ -20,6 +20,15 @@ static volatile int input=-1;
 static int chosen=-1, chain=-1;
 static int8_t checkers[64]={};
 static uint8_t connect[42]={};
+struct DropAnimation {
+ bool active=false;
+ volatile bool finished=false;
+ int col=0,row=0;
+ int player=1;
+ lv_obj_t *disc=nullptr;
+};
+static DropAnimation drop;
+static bool cpuDropPending=false;
 static uint32_t guesses=0;
 static uint8_t misses=0;
 static const char *word=nullptr;
@@ -307,27 +316,122 @@ static int c4AIMove(){
  }
  return best;
 }
+static void c4DiscStyle(lv_obj_t *disc,int player){
+ const uint32_t base=player==1?0xDBA72E:0xB83536;
+ const uint32_t shine=player==1?0xFFF0A4:0xFF9991;
+ lv_obj_set_style_radius(disc,LV_RADIUS_CIRCLE,0);
+ lv_obj_set_style_bg_color(disc,lv_color_hex(base),0);
+ lv_obj_set_style_bg_grad_color(disc,lv_color_hex(shine),0);
+ lv_obj_set_style_bg_grad_dir(disc,LV_GRAD_DIR_VER,0);
+ lv_obj_set_style_border_color(disc,lv_color_hex(player==1?0x795113:0x6B1D1B),0);
+ lv_obj_set_style_border_width(disc,3,0);
+ lv_obj_set_style_shadow_color(disc,lv_color_hex(0x090402),0);
+ lv_obj_set_style_shadow_width(disc,5,0);
+ lv_obj_set_style_shadow_ofs_y(disc,2,0);
+ lv_obj_set_style_pad_all(disc,0,0);
+ lv_obj_remove_flag(disc,LV_OBJ_FLAG_CLICKABLE);
+}
+static void c4Frame(void *obj,int32_t y){
+ lv_obj_set_y((lv_obj_t*)obj,y);
+}
+static void c4Arrived(lv_anim_t *a){(void)a;drop.finished=true;}
+static void c4StartDrop(int col){
+ if(drop.active||done||col<0||col>6)return;
+ int row=c4Row(col);
+ if(row<0)return;
+ drop.active=true;drop.finished=false;drop.col=col;drop.row=row;drop.player=turn;
+ // Disc starts above the cabinet, travels down the center of the chosen chute.
+ drop.disc=lv_obj_create(screen);
+ lv_obj_set_size(drop.disc,43,43);
+ lv_obj_set_pos(drop.disc,240+col*58+7,22);
+ c4DiscStyle(drop.disc,turn);
+ lv_obj_move_foreground(drop.disc);
+ lv_anim_t motion;lv_anim_init(&motion);
+ lv_anim_set_var(&motion,drop.disc);
+ lv_anim_set_values(&motion,22,67+row*58+7);
+ lv_anim_set_duration(&motion,280+row*38);
+ lv_anim_set_path_cb(&motion,lv_anim_path_ease_in);
+ lv_anim_set_exec_cb(&motion,c4Frame);
+ lv_anim_set_completed_cb(&motion,c4Arrived);
+ lv_anim_start(&motion);
+}
 static void showConnect4(){
  header("CONNECT FOUR");
- label(35,175,solo?"YOU: YELLOW\nCPU: RED":"YELLOW vs RED");
- label(35,260,"Tap any column\nto drop a disc.");
+ // Carved cabinet, brass fasteners and inset circular wells.
+ label(26,175,solo?"YOU: GOLD\nCPU: RUBY":"GOLD vs RUBY");
+ label(26,253,"Tap a column\nto release a disc.");
+ lv_obj_t *cabinet=lv_obj_create(screen);
+ lv_obj_set_pos(cabinet,226,53);lv_obj_set_size(cabinet,430,374);
+ lv_obj_set_style_radius(cabinet,13,0);
+ lv_obj_set_style_pad_all(cabinet,0,0);
+ lv_obj_set_style_bg_color(cabinet,lv_color_hex(0x4C2915),0);
+ lv_obj_set_style_bg_grad_color(cabinet,lv_color_hex(0x986236),0);
+ lv_obj_set_style_bg_grad_dir(cabinet,LV_GRAD_DIR_HOR,0);
+ lv_obj_set_style_border_color(cabinet,lv_color_hex(0xBC8E4A),0);
+ lv_obj_set_style_border_width(cabinet,5,0);
+ lv_obj_set_style_shadow_color(cabinet,lv_color_hex(0x090403),0);
+ lv_obj_set_style_shadow_width(cabinet,15,0);
+ lv_obj_remove_flag(cabinet,LV_OBJ_FLAG_CLICKABLE);
  for(int r=0;r<6;r++)for(int c=0;c<7;c++){
+  const int x=240+c*58,y=67+r*58;
   lv_obj_t *sq=lv_obj_create(screen);
-  lv_obj_set_pos(sq,240+c*58,67+r*58);lv_obj_set_size(sq,56,56);
-  lv_obj_set_style_bg_color(sq,lv_color_hex(0x5B391E),0);
-  lv_obj_set_style_radius(sq,4,0);lv_obj_set_style_pad_all(sq,0,0);
-  lv_obj_set_style_border_width(sq,1,0);
-  lv_obj_set_style_border_color(sq,lv_color_hex(0xAA7A43),0);
+  lv_obj_set_pos(sq,x,y);lv_obj_set_size(sq,56,56);
+  lv_obj_set_style_bg_color(sq,lv_color_hex(0x26170E),0);
+  lv_obj_set_style_radius(sq,LV_RADIUS_CIRCLE,0);
+  lv_obj_set_style_pad_all(sq,0,0);
+  lv_obj_set_style_border_width(sq,4,0);
+  lv_obj_set_style_border_color(sq,lv_color_hex(0xAC7C42),0);
+  lv_obj_set_style_shadow_width(sq,3,0);
+  lv_obj_set_style_shadow_color(sq,lv_color_hex(0x0C0604),0);
   lv_obj_remove_flag(sq,LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(sq,onButton,LV_EVENT_CLICKED,(void*)(intptr_t)(200+c));
-  lv_obj_t *disc=lv_obj_create(sq);
-  lv_obj_set_pos(disc,7,7);lv_obj_set_size(disc,42,42);
-  lv_obj_set_style_radius(disc,LV_RADIUS_CIRCLE,0);
-  lv_obj_set_style_pad_all(disc,0,0);
-  lv_obj_set_style_bg_color(disc,lv_color_hex(connect[r*7+c]==1?0xF2DC70:connect[r*7+c]==2?0xC84F5C:0x21130B),0);
-  lv_obj_set_style_border_width(disc,0,0);
-  lv_obj_remove_flag(disc,LV_OBJ_FLAG_CLICKABLE);
+  if(connect[r*7+c]){
+   lv_obj_t *disc=lv_obj_create(sq);
+   lv_obj_set_pos(disc,3,3);lv_obj_set_size(disc,43,43);
+   c4DiscStyle(disc,connect[r*7+c]);
+  }else{
+   lv_obj_t *well=lv_obj_create(sq);
+   lv_obj_set_pos(well,5,5);lv_obj_set_size(well,39,39);
+   lv_obj_set_style_radius(well,LV_RADIUS_CIRCLE,0);
+   lv_obj_set_style_bg_color(well,lv_color_hex(0x100B08),0);
+   lv_obj_set_style_border_color(well,lv_color_hex(0x372116),0);
+   lv_obj_set_style_border_width(well,3,0);
+   lv_obj_set_style_pad_all(well,0,0);
+   lv_obj_remove_flag(well,LV_OBJ_FLAG_CLICKABLE);
+  }
  }
+ for(int i=0;i<4;i++){
+  lv_obj_t *rivet=lv_obj_create(screen);
+  lv_obj_set_pos(rivet,229+(i%2)*420,57+(i/2)*361);
+  lv_obj_set_size(rivet,9,9);
+  lv_obj_set_style_radius(rivet,LV_RADIUS_CIRCLE,0);
+  lv_obj_set_style_bg_color(rivet,lv_color_hex(0xD7B16D),0);
+  lv_obj_set_style_border_width(rivet,1,0);
+  lv_obj_set_style_border_color(rivet,lv_color_hex(0x5D381F),0);
+  lv_obj_set_style_pad_all(rivet,0,0);
+  lv_obj_remove_flag(rivet,LV_OBJ_FLAG_CLICKABLE);
+ }
+}
+static void render();
+static bool c4Tick(){
+ if(game!=CONNECT4)return false;
+ if(drop.active&&!drop.finished)return false;
+ if(drop.active&&drop.finished){
+  const int col=drop.col;
+  drop.active=false;drop.finished=false;drop.disc=nullptr;
+  // Move resolves only after the falling animation arrives.
+  c4Drop(col);
+  if(solo&&!done&&turn==2)cpuDropPending=true;
+  render();
+  return true;
+ }
+ if(cpuDropPending&&!drop.active){
+  cpuDropPending=false;
+  int col=c4AIMove();
+  if(col>=0)c4StartDrop(col);
+  return true;
+ }
+ return false;
 }
 static bool wordSolved(){
  for(const char *s=word;*s;s++)if(!(guesses&(1u<<(*s-'A'))))return false;
@@ -635,6 +739,7 @@ static void render(){
  else if(game==SOS)showSOS();
 }
 static void start(Game g,bool ai){
+ drop.active=false;drop.finished=false;drop.disc=nullptr;cpuDropPending=false;
  game=g;solo=ai;turn=1;done=false;chosen=-1;chain=-1;
  input=-1;guesses=0;misses=0;
  if(g==CHECKERS){
@@ -669,10 +774,8 @@ static void handle(int action){
   checkerSelect(action-100);
   if(solo&&!done&&turn==2)checkerAI();
  }else if(game==CONNECT4&&action>=200&&action<207){
-  if(!done&&(!solo||turn==1)){
-   c4Drop(action-200);
-   if(solo&&!done&&turn==2)c4Drop(c4AIMove());
-  }
+  if(!done&&!drop.active&&(!solo||turn==1))c4StartDrop(action-200);
+  return; // Keep the board alive while the drop animation runs.
  }else if(game==HANGBOT&&action>=300&&action<326)hangGuess(action-300);
  else if(game==DOTS&&action>=400&&action<440){
   if(!solo||turn==1){dotsMove(action-400);if(solo&&!done&&turn==2)dotsAI();}
