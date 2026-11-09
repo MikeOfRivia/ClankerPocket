@@ -1010,6 +1010,13 @@ void loop(){
   }
  }
  // Prevent taps behind a modal from executing queued chess moves.
+ // LVGL owns the disc movement; chess/arcade loop commits only on arrival.
+ if(arcade::game==arcade::CONNECT4&&
+   (arcade::drop.finished||arcade::cpuDropPending)&&
+   esp_lv_adapter_lock(1000)==ESP_OK){
+  arcade::c4Tick();
+  esp_lv_adapter_unlock();
+ }
  if(inGame&&!modeOverlay&&sq>=0&&sq<128&&!(sq&0x88)){
   squareClicked((uint8_t)sq);
   dirty=true;
